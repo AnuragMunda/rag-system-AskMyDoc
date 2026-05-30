@@ -1,7 +1,7 @@
 export type SourceType = "pdf" | "markdown" | "web";
 
 export interface ParsedSection {
-  text: string;
+  content: string;
   heading?: string;
   pageNumber?: number;
 }
