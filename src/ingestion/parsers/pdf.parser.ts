@@ -35,7 +35,6 @@ export class PdfParser implements DocumentParser {
 
       // Step 4: Extract content from PDF, page-by-page (Preserve page boundaries)
       const sections = await this.extractContentFromPdfPages(pdf);
-      logger.info({ totalPages: pdf.numPages }, `Content extraction completed`);
 
       // Step 5: Clean text in each section
       sections.forEach((section) => {
@@ -106,6 +105,8 @@ export class PdfParser implements DocumentParser {
 
       logger.info({ characterCount: pageText.length });
     }
+
+    logger.info({ totalPages: pdf.numPages }, `Content extraction completed`);
     return page;
   }
 
@@ -118,6 +119,12 @@ export class PdfParser implements DocumentParser {
 
     for (const item of items) {
       if (!("str" in item)) continue;
+
+      // If the text item is just a page number, skip it
+      const isPageNumber = /^\d+$/.test(item.str.trim());
+      if (isPageNumber) {
+        continue;
+      }
 
       const y: number = item.transform[5];
 
@@ -161,7 +168,7 @@ export class PdfParser implements DocumentParser {
       }
     }
     paragraphs.push(currentParagraph.trim());
-    
+
     return paragraphs.join("\n\n");
   }
 }
