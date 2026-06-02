@@ -3,6 +3,5 @@ export function cleanText(text: string) {
   return text
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n")
-    .replace(/\s+/g, " ")
     .trim();
 }
