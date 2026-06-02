@@ -1,10 +1,16 @@
 import { DocumentParser } from "./parser.interface.js";
-import { ParsedDocument, ParsedSection, SourceType } from "../types.js";
+import {
+  ParsedDocument,
+  ParsedSection,
+  PdfLine,
+  SourceType,
+} from "../types.js";
 import { v4 as uuidv4 } from "uuid";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { logger } from "@/shared/logger/logger.js";
+import { cleanText } from "../cleaners/clean-text.js";
 
 export class PdfParser implements DocumentParser {
   async parse(filePath: string): Promise<ParsedDocument> {
@@ -30,6 +36,15 @@ export class PdfParser implements DocumentParser {
       // Step 4: Extract content from PDF, page-by-page (Preserve page boundaries)
       const sections = await this.extractContentFromPdfPages(pdf);
       logger.info({ totalPages: pdf.numPages }, `Content extraction completed`);
+
+      // Step 5: Clean text in each section
+      sections.forEach((section) => {
+        section.content = cleanText(section.content);
+        section.paragraphs.forEach((para) => {
+          para.text = cleanText(para.text);
+        });
+      });
+      logger.info(`Text cleaning completed`);
 
       // Return unified format
       return {
@@ -64,27 +79,89 @@ export class PdfParser implements DocumentParser {
     return fs.readFile(filePath);
   }
 
+  // This method processes each page of the PDF and extracts text content while preserving page boundaries
   private async extractContentFromPdfPages(pdf: any): Promise<ParsedSection[]> {
     const page: ParsedSection[] = [];
 
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       logger.info(`Processing page ${pageNum} of ${pdf.numPages}`);
-      
+
       const pageData = await pdf.getPage(pageNum);
       const textContent = await pageData.getTextContent();
-      const pageText = textContent.items.map((item: any) => item.str).join(" ");
+      const pageText = this.buildParagraphs(textContent.items);
 
       if (pageText.trim().length === 0) {
         logger.warn(`Page ${pageNum} is empty or contains non-text content`);
       }
 
       page.push({
-        content: pageText,
         pageNumber: pageNum,
+        content: pageText,
+        paragraphs: pageText.split("\n\n").map((para, index) => ({
+          id: `p${index + 1}`,
+          index,
+          text: para.trim(),
+        })),
       });
 
       logger.info({ characterCount: pageText.length });
     }
     return page;
+  }
+
+  // This method reconstructs paragraphs based on the Y position of text items
+  private buildParagraphs(items: any[]): string {
+    const lines: PdfLine[] = []; // To store the reconstructed lines
+
+    let currentY: number | null = null; // Track the current Y position to determine line breaks
+    let currentLine = ""; // Accumulate text for the current line
+
+    for (const item of items) {
+      if (!("str" in item)) continue;
+
+      const y: number = item.transform[5];
+
+      if (currentY === null) {
+        currentY = y;
+      }
+
+      const deltaY = Math.abs(currentY - y);
+
+      // If the Y position changes significantly, we consider it a new line
+      if (deltaY > 5) {
+        lines.push({ y: currentY, text: currentLine.trim() });
+        currentLine = item.str;
+        currentY = y;
+      } else {
+        currentLine += " " + item.str;
+      }
+    }
+
+    if (currentLine.trim()) {
+      lines.push({ y: currentY!, text: currentLine.trim() });
+    }
+
+    const paragraphs: string[] = [];
+
+    let currentParagraph = lines[0]!.text;
+
+    for (let i = 1; i < lines.length; i++) {
+      const prev = lines[i - 1]!;
+      const current = lines[i]!;
+
+      const gap = Math.abs(prev.y - current.y);
+
+      const isParagraphBreak = gap > 20;
+
+      if (isParagraphBreak) {
+        paragraphs.push(currentParagraph.trim());
+        currentParagraph = current.text;
+      } else {
+        currentParagraph += " " + current.text;
+      }
+    }
+    paragraphs.push(currentParagraph.trim());
+    
+    return paragraphs.join("\n\n");
   }
 }
