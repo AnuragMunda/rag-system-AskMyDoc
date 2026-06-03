@@ -1,8 +1,11 @@
 export type SourceType = "pdf" | "markdown" | "web";
 
 export interface ParsedSection {
-  pageNumber: number;
-  heading?: string;
+  pageNumber?: number;
+  heading?: {
+    text: string;
+    headingLevel: number;
+  };
   content: string; // Full page text
   paragraphs: Paragraph[]; // Individual paragraphs
 }
@@ -28,4 +31,10 @@ export interface Paragraph {
 export interface PdfLine {
   y: number;
   text: string;
+}
+
+export interface MarkdownSection {
+  heading?: string;
+  headingLevel?: number;
+  paragraphs: string[];
 }
