@@ -1,3 +1,9 @@
+import path from "node:path";
+import fs from "node:fs/promises";
+
+import { v4 as uuidv4 } from "uuid";
+import { getDocument, PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
+
 import { DocumentParser } from "./parser.interface.js";
 import {
   ParsedDocument,
@@ -5,10 +11,6 @@ import {
   PdfLine,
   SourceType,
 } from "../types.js";
-import { v4 as uuidv4 } from "uuid";
-import path from "node:path";
-import fs from "node:fs/promises";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { logger } from "@/shared/logger/logger.js";
 import { cleanText } from "../cleaners/clean-text.js";
 import { findMedian } from "@/shared/utils/statistics.js";
@@ -87,7 +89,7 @@ export class PdfParser implements DocumentParser {
   }
 
   // This method processes each page of the PDF and extracts text content while preserving page boundaries
-  private async extractContentFromPdfPages(pdf: any): Promise<ParsedSection[]> {
+  private async extractContentFromPdfPages(pdf: PDFDocumentProxy): Promise<ParsedSection[]> {
     const page: ParsedSection[] = [];
 
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
