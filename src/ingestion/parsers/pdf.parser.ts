@@ -11,6 +11,7 @@ import fs from "node:fs/promises";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { logger } from "@/shared/logger/logger.js";
 import { cleanText } from "../cleaners/clean-text.js";
+import { findMedian } from "@/shared/utils/statistics.js";
 
 export class PdfParser implements DocumentParser {
   async parse(filePath: string): Promise<ParsedDocument> {
@@ -113,6 +114,7 @@ export class PdfParser implements DocumentParser {
   // This method reconstructs paragraphs based on the Y position of text items
   private buildParagraphs(items: any[]): string {
     const lines: PdfLine[] = []; // To store the reconstructed lines
+    const gapsY: number[] = []; // To store the gaps between lines for median calculation
 
     let currentY: number | null = null; // Track the current Y position to determine line breaks
     let currentLine = ""; // Accumulate text for the current line
@@ -133,6 +135,7 @@ export class PdfParser implements DocumentParser {
       }
 
       const deltaY = Math.abs(currentY - y);
+      gapsY.push(deltaY);
 
       // If the Y position changes significantly, we consider it a new line
       if (deltaY > 5) {
@@ -148,6 +151,7 @@ export class PdfParser implements DocumentParser {
       lines.push({ y: currentY!, text: currentLine.trim() });
     }
 
+    const medianGap = findMedian(gapsY.sort((a, b) => a - b));
     const paragraphs: string[] = [];
 
     let currentParagraph = lines[0]!.text;
@@ -158,7 +162,7 @@ export class PdfParser implements DocumentParser {
 
       const gap = Math.abs(prev.y - current.y);
 
-      const isParagraphBreak = gap > 20;
+      const isParagraphBreak = gap > medianGap * 1.5;
 
       if (isParagraphBreak) {
         paragraphs.push(currentParagraph.trim());
@@ -168,7 +172,6 @@ export class PdfParser implements DocumentParser {
       }
     }
     paragraphs.push(currentParagraph.trim());
-
     return paragraphs.join("\n\n");
   }
 }
