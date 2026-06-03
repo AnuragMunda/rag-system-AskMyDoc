@@ -13,7 +13,10 @@ export interface ParsedDocument {
   sourceType: SourceType;
   source: string; // file path or URL
   sections: ParsedSection[];
-  metadata?: Record<string, unknown>;
+  metadata: {
+    pageCount?: number;
+    parsedAt: string; // ISO timestamp
+  };
 }
 
 export interface Paragraph {

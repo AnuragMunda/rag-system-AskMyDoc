@@ -37,6 +37,10 @@ export class PdfParser implements DocumentParser {
       // Step 4: Extract content from PDF, page-by-page (Preserve page boundaries)
       const sections = await this.extractContentFromPdfPages(pdf);
 
+      if (sections.length === 0) {
+        throw new Error("No extractable content found in PDF");
+      }
+
       // Step 5: Clean text in each section
       sections.forEach((section) => {
         section.content = cleanText(section.content);
@@ -49,11 +53,14 @@ export class PdfParser implements DocumentParser {
       // Return unified format
       return {
         id: uuidv4(),
-        title: path.basename(filePath),
+        title: path.basename(filePath, path.extname(filePath)),
         sourceType: "pdf" as SourceType,
         source: filePath,
         sections,
-        metadata: {},
+        metadata: {
+          pageCount: pdf.numPages,
+          parsedAt: new Date().toISOString(),
+        },
       };
     } catch (error) {
       throw new Error(
