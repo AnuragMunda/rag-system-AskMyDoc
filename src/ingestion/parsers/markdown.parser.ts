@@ -2,6 +2,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { v4 as uuidv4 } from "uuid";
+import { unified } from "unified";
+import remarkParse from "remark-parse";
+import { visit } from "unist-util-visit";
 
 import {
   MarkdownSection,
@@ -11,9 +14,6 @@ import {
 } from "../types.js";
 import { DocumentParser } from "./parser.interface.js";
 import { logger } from "@/shared/logger/logger.js";
-import { unified } from "unified";
-import remarkParse from "remark-parse";
-import { visit } from "unist-util-visit";
 
 export class MarkdownParser implements DocumentParser {
   async parse(filePath: string): Promise<ParsedDocument> {
@@ -26,7 +26,7 @@ export class MarkdownParser implements DocumentParser {
       logger.info({ filePath }, "Markdown loaded successfully");
 
       // Step:2 Parse the markdown content into an AST (Abstract Syntax Tree)
-      const tree = unified().use(remarkParse).parse(markdown);
+      const tree = unified().use(remarkParse).parse(markdown)
 
       // Step:3 Extract content from AST, preserving section boundaries based on headings
       const sections = await this.extractContentFromMarkdown(tree);
@@ -40,12 +40,10 @@ export class MarkdownParser implements DocumentParser {
         "Content extraction completed",
       );
 
-      // Step:4 Normalize extracted content into unified format
+      // Step:4 Normalise extracted content into unified format
       const parsedSection: ParsedSection[] = sections.map((section) => ({
-        heading: {
-          text: section.heading!,
-          headingLevel: section.headingLevel!,
-        },
+        heading: section.heading!,
+        headingLevel: section.headingLevel!,
         content: section.paragraphs.join("\n\n"),
         paragraphs: section.paragraphs.map((para, index) => ({
           id: `p${index + 1}`,
@@ -114,7 +112,6 @@ export class MarkdownParser implements DocumentParser {
       if (node.type === "paragraph") {
         currentSection.paragraphs.push(this.extractText(node));
       }
-
     });
 
     sections.push(currentSection);
