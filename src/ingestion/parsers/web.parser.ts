@@ -9,7 +9,7 @@ import { logger } from "@/shared/logger/logger.js";
 
 export class WebParser implements DocumentParser {
   async parse(url: string): Promise<ParsedDocument> {
-    logger.info("Starting ingestion\n");
+    logger.info("Starting webpage ingestion\n");
 
     try {
       // Step 1: Fetch Webpage
@@ -48,6 +48,9 @@ export class WebParser implements DocumentParser {
         })),
       }));
       logger.info("Parsing successful");
+      logger.info(
+        "\n<--------------------------------------------------------->\n",
+      );
 
       // Return unified format
       return {
