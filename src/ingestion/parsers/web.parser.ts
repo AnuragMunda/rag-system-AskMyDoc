@@ -5,12 +5,16 @@ import { ParsedDocument, SourceType, WebSection } from "../types.js";
 import { DocumentParser } from "./parser.interface.js";
 import { Readability } from "@mozilla/readability";
 import { parseArgs } from "util";
+import { logger } from "@/shared/logger/logger.js";
 
 export class WebParser implements DocumentParser {
   async parse(url: string): Promise<ParsedDocument> {
+    logger.info("Starting ingestion\n");
+
     try {
       // Step 1: Fetch Webpage
       const html = await this.fetchPage(url);
+      logger.info({ url }, "webpage fetched successfully");
 
       // Step 2: Extract main content
       const { JSDOM } = jsdom;
@@ -23,11 +27,14 @@ export class WebParser implements DocumentParser {
         throw new Error("Unable to extract article content");
       }
 
+      logger.info({ contentLength: article.length }, "Main content extracted");
+
       // Step 3: Parse article HTML
       const contentDom = new JSDOM(article.content!);
       const document = contentDom.window.document;
 
       // Step 4: Extract headings and paragraphs
+      logger.info("Parsing started");
       const sections = this.extractSections(document);
 
       // Step 5: Normalise extracted content into unified format
@@ -40,6 +47,7 @@ export class WebParser implements DocumentParser {
           text: para,
         })),
       }));
+      logger.info("Parsing successful");
 
       // Return unified format
       return {
@@ -69,6 +77,7 @@ export class WebParser implements DocumentParser {
     return page.text();
   }
 
+  // Extracts content from the page
   private extractSections(document: Document): WebSection[] {
     const sections: WebSection[] = [];
 
@@ -78,12 +87,12 @@ export class WebParser implements DocumentParser {
     };
 
     const elements = document.body.querySelectorAll(
-      "h1,h2,h3,h4,h5,h6,p,li,pre,code",
+      "h1,h2,h3,h4,h5,h6,p,li,pre,code,dl",
     );
 
     elements.forEach((element) => {
       const tag = element.tagName.toLowerCase();
-      const text = element.textContent.trim();
+      const text = this.extractRichText(element);
 
       if (!text) return;
 
@@ -100,12 +109,18 @@ export class WebParser implements DocumentParser {
         currentSection.paragraphs.push(text);
       }
 
+      if (tag === "dl") {
+        currentSection.paragraphs.push(
+          ...this.extractDescriptionLists(element),
+        );
+      }
+
       if (tag === "li") {
         currentSection.paragraphs.push(`• ${text}`);
       }
 
       if (tag === "pre") {
-        currentSection.paragraphs.push(`CODE:\n${text}`);
+        currentSection.paragraphs.push(`CODE_BLOCK:\n${text}`);
       }
     });
 
@@ -114,5 +129,59 @@ export class WebParser implements DocumentParser {
     return sections.filter(
       (section) => section.heading || section.paragraphs.length > 0,
     );
+  }
+
+  // For extracting text from tags within another tag
+  private extractRichText(node: Node): string {
+    if (node.nodeType === node.TEXT_NODE) {
+      return node.textContent ?? "";
+    }
+
+    if (!(node instanceof node.ownerDocument!.defaultView!.Element)) {
+      return "";
+    }
+
+    const tag = node.tagName.toLowerCase();
+
+    if (tag === "code") {
+      return `\`${node.textContent?.trim()}\``;
+    }
+
+    if (tag === "a") {
+      const href = node.getAttribute("href");
+
+      const replacement = href
+        ? `${node.textContent} (${href})`
+        : (node.textContent ?? "");
+
+      return replacement;
+    }
+
+    return Array.from(node.childNodes)
+      .map((child) => this.extractRichText(child))
+      .join("");
+  }
+
+  // Handle <dl> tags (Description Lists)
+  private extractDescriptionLists(element: Element): string[] {
+    const entries: string[] = [];
+
+    const children = Array.from(element.children);
+
+    let currentTerm = "";
+
+    for (const child of children) {
+      if (child.tagName.toLowerCase() === "dt") {
+        currentTerm = child.textContent?.trim() ?? "";
+      }
+
+      if (child.tagName.toLowerCase() === "dd" && currentTerm) {
+        const description = child.textContent?.trim() ?? "";
+
+        entries.push(`${currentTerm}: ${description}`);
+      }
+    }
+
+    return entries;
   }
 }
