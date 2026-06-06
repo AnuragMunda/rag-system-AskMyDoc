@@ -4,7 +4,6 @@ import jsdom from "jsdom";
 import { ParsedDocument, SourceType, WebSection } from "../types.js";
 import { DocumentParser } from "./parser.interface.js";
 import { Readability } from "@mozilla/readability";
-import { parseArgs } from "util";
 import { logger } from "@/shared/logger/logger.js";
 
 export class WebParser implements DocumentParser {
