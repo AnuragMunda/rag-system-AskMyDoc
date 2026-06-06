@@ -26,7 +26,7 @@ export class MarkdownParser implements DocumentParser {
       logger.info({ filePath }, "Markdown loaded successfully");
 
       // Step:2 Parse the markdown content into an AST (Abstract Syntax Tree)
-      const tree = unified().use(remarkParse).parse(markdown)
+      const tree = unified().use(remarkParse).parse(markdown);
 
       // Step:3 Extract content from AST, preserving section boundaries based on headings
       const sections = await this.extractContentFromMarkdown(tree);
@@ -51,6 +51,10 @@ export class MarkdownParser implements DocumentParser {
           text: para,
         })),
       }));
+      logger.info("Parsing successful");
+      logger.info(
+        "\n<--------------------------------------------------------->\n",
+      );
 
       // Return unified format
       return {

@@ -7,23 +7,31 @@ import { WebParser } from "../parsers/web.parser.js";
 import { SourceType } from "../types.js";
 
 export class ParserFactory {
+  private static parsers = new Map();
+
+  static {
+    this.parsers.set("pdf", PdfParser);
+
+    this.parsers.set("markdown", MarkdownParser);
+
+    this.parsers.set("web", WebParser);
+  }
+
   static create(sourceType: SourceType): DocumentParser {
-    switch (sourceType) {
-      case "pdf":
-        return new PdfParser();
+    const Parser = this.parsers.get(sourceType);
 
-      case "markdown":
-        return new MarkdownParser();
-
-      case "web":
-        return new WebParser();
-
-      default:
-        throw new Error(`Unsupported source type: ${sourceType}`);
+    if (!Parser) {
+      throw new Error(`Unsupported source type: ${sourceType}`);
     }
+
+    return new Parser();
   }
 
   static detectType(source: string): SourceType {
+    if (source.startsWith("http://") || source.startsWith("https://")) {
+      return "web";
+    }
+
     const ext = path.extname(source).toLowerCase();
 
     switch (ext) {
@@ -35,7 +43,7 @@ export class ParserFactory {
         return "markdown";
 
       default:
-        throw new Error(`Unable to determine parser for ${source}`);
+        throw new Error(`Unsupported source: ${source}`);
     }
   }
 

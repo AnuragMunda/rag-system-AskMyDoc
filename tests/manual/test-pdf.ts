@@ -1,13 +1,13 @@
-import { PdfParser } from "../../src/ingestion/parsers/pdf.parser.js";
+import { ParserFactory } from "./../../src/ingestion/factory/parser.factory";
 
 const main = async () => {
-  const parser = new PdfParser();
+  const parser = ParserFactory.create("pdf");
   const result = await parser.parse(
     "./tests/fixtures/pdfs/sample-multi-page.pdf",
   );
 
   setTimeout(() => {
-    console.log("\n\nParsed PDF: ", result);
+    console.log("\nParsed PDF: ", result);
   }, 1000);
 };
 

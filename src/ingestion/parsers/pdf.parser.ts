@@ -50,7 +50,10 @@ export class PdfParser implements DocumentParser {
           para.text = cleanText(para.text);
         });
       });
-      logger.info(`Text cleaning completed`);
+      logger.info(`Parsing successful`);
+      logger.info(
+        "\n<--------------------------------------------------------->\n",
+      );
 
       // Return unified format
       return {
@@ -89,7 +92,9 @@ export class PdfParser implements DocumentParser {
   }
 
   // This method processes each page of the PDF and extracts text content while preserving page boundaries
-  private async extractContentFromPdfPages(pdf: PDFDocumentProxy): Promise<ParsedSection[]> {
+  private async extractContentFromPdfPages(
+    pdf: PDFDocumentProxy,
+  ): Promise<ParsedSection[]> {
     const page: ParsedSection[] = [];
 
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
