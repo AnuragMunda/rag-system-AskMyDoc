@@ -102,7 +102,11 @@ export class PdfParser implements DocumentParser {
 
       const pageData = await pdf.getPage(pageNum);
       const textContent = await pageData.getTextContent();
-      const pageText = this.buildParagraphs(textContent.items);
+
+      const viewport = pageData.getViewport({ scale: 1 });
+      const pageHeight = viewport.height;
+
+      const pageText = this.buildParagraphs(textContent.items, pageHeight);
 
       if (pageText.trim().length === 0) {
         logger.warn(`Page ${pageNum} is empty or contains non-text content`);
@@ -126,12 +130,15 @@ export class PdfParser implements DocumentParser {
   }
 
   // This method reconstructs paragraphs based on the Y position of text items
-  private buildParagraphs(items: any[]): string {
+  private buildParagraphs(items: any[], pageHeight: number): string {
     const lines: PdfLine[] = []; // To store the reconstructed lines
     const gapsY: number[] = []; // To store the gaps between lines for median calculation
 
     let currentY: number | null = null; // Track the current Y position to determine line breaks
     let currentLine = ""; // Accumulate text for the current line
+
+    const HEADER_MARGIN = pageHeight * 0.1;
+    const FOOTER_MARGIN = pageHeight * 0.1;
 
     for (const item of items) {
       if (!("str" in item)) continue;
@@ -146,6 +153,10 @@ export class PdfParser implements DocumentParser {
 
       if (currentY === null) {
         currentY = y;
+      }
+
+      if (y > FOOTER_MARGIN && y < pageHeight - HEADER_MARGIN) {
+        continue;
       }
 
       const deltaY = Math.abs(currentY - y);
