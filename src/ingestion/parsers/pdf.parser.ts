@@ -116,7 +116,7 @@ export class PdfParser implements DocumentParser {
         pageNumber: pageNum,
         content: pageText,
         paragraphs: pageText.split("\n\n").map((para, index) => ({
-          id: `p${index + 1}`,
+          id: `para-${index + 1}`,
           index,
           text: para.trim(),
         })),
@@ -141,7 +141,8 @@ export class PdfParser implements DocumentParser {
     const FOOTER_MARGIN = pageHeight * 0.1;
 
     for (const item of items) {
-      if (!("str" in item)) continue;
+      
+      if (!("str" in item) || item.height < 10) continue;
 
       // If the text item is just a page number, skip it
       const isPageNumber = /^\d+$/.test(item.str.trim());
@@ -151,12 +152,12 @@ export class PdfParser implements DocumentParser {
 
       const y: number = item.transform[5];
 
-      if (currentY === null) {
-        currentY = y;
+      if (y < FOOTER_MARGIN || y > pageHeight - HEADER_MARGIN) {
+        continue;
       }
 
-      if (y > FOOTER_MARGIN && y < pageHeight - HEADER_MARGIN) {
-        continue;
+      if (currentY === null) {
+        currentY = y;
       }
 
       const deltaY = Math.abs(currentY - y);
@@ -186,8 +187,7 @@ export class PdfParser implements DocumentParser {
       const current = lines[i]!;
 
       const gap = Math.abs(prev.y - current.y);
-
-      const isParagraphBreak = gap > medianGap * 1.5;
+      const isParagraphBreak = gap > medianGap * 1.3;
 
       if (isParagraphBreak) {
         paragraphs.push(currentParagraph.trim());
