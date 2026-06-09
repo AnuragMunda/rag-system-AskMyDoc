@@ -1,3 +1,5 @@
+//////////////////// TYPES FOR PARSING ////////////////////
+
 export type SourceType = "pdf" | "markdown" | "web";
 
 export interface ParsedSection {
@@ -40,4 +42,41 @@ export interface MarkdownSection {
 export interface WebSection {
   heading?: string;
   paragraphs: string[];
+}
+
+//////////////////// TYPES FOR CHUNKING ////////////////////
+
+export interface Chunk {
+  id: string;
+  documentId: string;
+  chunkIndex: number;
+  content: string;
+  tokenCount: number;
+  metadata: {
+    pageNumber?: number;
+    heading?: string;
+    paragraphIds: string[];
+  };
+}
+
+export interface ChunkerOptions {
+  maxTokens?: number;
+  overlapTokens?: number;
+}
+
+export interface ChunkMetadata {
+  heading?: string;
+  pageNumber?: number;
+}
+
+export interface Overlap {
+  overlapParagraphs: string[];
+  overlapIds: string[];
+}
+
+export interface ParagraphRef {
+  text: string;
+  paragraphId: string;
+  pageNumber?: number;
+  heading?: string;
 }
