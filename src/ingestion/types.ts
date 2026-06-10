@@ -5,9 +5,10 @@ export type SourceType = "pdf" | "markdown" | "web";
 export interface ParsedSection {
   pageNumber?: number;
   heading?: string;
+  headingPath?: string[];
   headingLevel?: number;
   content: string; // Full page text
-  paragraphs: Paragraph[]; // Individual paragraphs
+  blocks: ContentBlock[];
 }
 
 export interface ParsedDocument {
@@ -22,9 +23,10 @@ export interface ParsedDocument {
   };
 }
 
-export interface Paragraph {
+export interface ContentBlock {
   id: string;
   index: number;
+  type: "paragraph" | "code" | "list" | "table" | "definition";
   text: string;
 }
 
@@ -36,12 +38,15 @@ export interface PdfLine {
 export interface MarkdownSection {
   heading?: string;
   headingLevel?: number;
-  paragraphs: string[];
+  headingPath: string[];
+  blocks: ContentBlock[];
 }
 
 export interface WebSection {
   heading?: string;
-  paragraphs: string[];
+  headingLevel?: number;
+  headingPath: string[];
+  blocks: ContentBlock[];
 }
 
 //////////////////// TYPES FOR CHUNKING ////////////////////
@@ -54,8 +59,10 @@ export interface Chunk {
   tokenCount: number;
   metadata: {
     pageNumber?: number;
-    heading?: string;
-    paragraphIds: string[];
+    headingPath?: string[];
+    sourceType: SourceType;
+    source: string;
+    blockIds: string[];
   };
 }
 
@@ -65,18 +72,16 @@ export interface ChunkerOptions {
 }
 
 export interface ChunkMetadata {
-  heading?: string;
+  headingPath?: string[];
   pageNumber?: number;
+  sourceType: SourceType;
+  source: string;
 }
 
-export interface Overlap {
-  overlapParagraphs: string[];
-  overlapIds: string[];
-}
-
-export interface ParagraphRef {
+export interface BlockRef {
+  blockId: string;
   text: string;
-  paragraphId: string;
+  type: ContentBlock["type"];
+  headingPath?: string[];
   pageNumber?: number;
-  heading?: string;
 }

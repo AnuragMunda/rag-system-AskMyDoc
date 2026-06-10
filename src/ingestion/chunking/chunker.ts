@@ -2,14 +2,15 @@ import crypto from "node:crypto";
 
 import { logger } from "@/shared/logger/logger.js";
 import {
+  BlockRef,
   Chunk,
   ChunkerOptions,
   ChunkMetadata,
-  Overlap,
-  ParagraphRef,
   ParsedDocument,
+  SourceType,
 } from "../types.js";
 import { countTokens } from "./tokeniser.js";
+import { updateHeadingStack } from "@/shared/utils/helper.js";
 
 export class Chunker {
   private readonly maxTokens: number;
@@ -28,13 +29,19 @@ export class Chunker {
     );
 
     // Step 1: Flatten the document
-    const paragraphs = this.flattenDocument(document);
+    const blocks = this.flattenDocument(document);
     logger.info("Document Flattened");
 
     // Step 2: Build chunks
     logger.info("Building chunks");
     logger.info("...............");
-    const chunks = await this.buildChunks(paragraphs, document.id);
+    const chunks = await this.buildChunks(
+      blocks,
+      document.id,
+      document.sourceType,
+      document.source,
+    );
+    logger.info("...............");
     logger.info({ chunksGenerated: chunks.length }, "Chunking successful");
     logger.info(
       "\n<--------------------------------------------------------->\n",
@@ -45,83 +52,105 @@ export class Chunker {
 
   // This method carry out the entire process of build chunks from a flatten document
   private async buildChunks(
-    paragraphs: ParagraphRef[],
+    blocks: BlockRef[],
     documentId: string,
+    sourceType: SourceType,
+    source: string,
   ): Promise<Chunk[]> {
-    const chunks: Chunk[] = []; // Store for all the chunks
+    const chunks: Chunk[] = [];
 
-    let chunkIndex = 0; // Chunk count
-    let currentParagraphs: string[] = [];
+    let chunkIndex = 0;
 
-    let paragraphIds: string[] = [];
-    let lastHeading = "";
-    let lastPageNumber = 0;
+    let currentBlocks: BlockRef[] = [];
 
-    // Accumulate tokens -> Check overflow -> Create and Save Chunks -> Add overlap
-    for (let i = 0; i < paragraphs.length; i++) {
-      logger.info(`Processing paragraph ${i + 1} of ${paragraphs.length}`);
-      const para = paragraphs[i]!;
+    let lastHeadingPath: string[] = [];
+    let lastPageNumber: number | undefined;
 
-      const candidate = currentParagraphs.concat(para.text);
-      const candidateText = candidate.join("\n\n");
+    const enforceHeadingBoundaries = sourceType !== "pdf";
 
-      const tokenCount = await countTokens(candidateText);
-
-      const parsedParaId = this.parseParagraphId(
-        para.pageNumber ?? 0,
-        para.paragraphId,
-      );
-
-      const isOverflow =
-        tokenCount > this.maxTokens && currentParagraphs.length > 0;
-
-      // If current Chunk is full, then save and create a new Chunk
-      if (isOverflow) {
-        const chunk = await this.createChunk({
-          documentId,
-          chunkIndex,
-          paragraphs: currentParagraphs,
-          metadata: {
-            heading: para.heading ?? "",
-            pageNumber: para.pageNumber ?? 0,
-          },
-          paragraphIds,
-        });
-
-        chunks.push(chunk);
-        chunkIndex++;
-
-        // Compute and add overlap
-        const { overlapParagraphs, overlapIds } = await this.computeOverlap(
-          currentParagraphs,
-          paragraphIds,
-        );
-
-        currentParagraphs = [...overlapParagraphs, para.text];
-        paragraphIds = [...overlapIds, parsedParaId];
-        lastHeading = para.heading ?? "";
-        lastPageNumber = para.pageNumber ?? 0;
-      } else {
-        currentParagraphs.push(para.text);
-        paragraphIds.push(parsedParaId);
+    const flushChunk = async () => {
+      if (currentBlocks.length === 0) {
+        return;
       }
-    }
 
-    if (currentParagraphs.length > 0) {
       const chunk = await this.createChunk({
         documentId,
         chunkIndex,
-        paragraphs: currentParagraphs,
+        blocks: currentBlocks,
         metadata: {
-          heading: lastHeading,
-          pageNumber: lastPageNumber,
+          headingPath: lastHeadingPath.length > 0 ? [...lastHeadingPath] : [],
+          pageNumber: lastPageNumber ?? 0,
+          sourceType,
+          source,
         },
-        paragraphIds,
       });
 
       chunks.push(chunk);
       chunkIndex++;
+    };
+
+    for (const [index, block] of blocks.entries()) {
+      if (index % 5 === 0) {
+        logger.info(`Please wait...`);
+      }
+
+      if (currentBlocks.length === 0) {
+        currentBlocks.push(block);
+
+        lastHeadingPath = [...block.headingPath!];
+        lastPageNumber = block.pageNumber;
+
+        continue;
+      }
+
+      const headingChanged =
+        enforceHeadingBoundaries &&
+        !this.sameHeadingPath(
+          currentBlocks[0]?.headingPath ?? [],
+          block.headingPath!,
+        );
+
+      if (headingChanged) {
+        await flushChunk();
+
+        // Do NOT apply overlap across headings.
+        currentBlocks = [block];
+
+        lastHeadingPath = [...block.headingPath!];
+        lastPageNumber = block.pageNumber;
+
+        continue;
+      }
+
+      const candidateBlocks = [...currentBlocks, block];
+
+      const candidateText = candidateBlocks.map((b) => b.text).join("\n\n");
+
+      const candidateTokens = await countTokens(candidateText);
+
+      const exceedsLimit = candidateTokens > this.maxTokens;
+
+      if (exceedsLimit) {
+        await flushChunk();
+
+        // Overlap only on token overflow.
+        const { overlapBlocks } = await this.computeOverlap(currentBlocks);
+
+        currentBlocks = [...overlapBlocks, block];
+
+        lastHeadingPath = [...block.headingPath!];
+        lastPageNumber = block.pageNumber;
+
+        continue;
+      }
+
+      currentBlocks.push(block);
+
+      lastHeadingPath = [...block.headingPath!];
+      lastPageNumber = block.pageNumber;
     }
+
+    await flushChunk();
 
     return chunks;
   }
@@ -130,19 +159,17 @@ export class Chunker {
   private async createChunk({
     documentId,
     chunkIndex,
-    paragraphs,
+    blocks,
     metadata,
-    paragraphIds,
   }: {
     documentId: string;
     chunkIndex: number;
-    paragraphs: string[];
+    blocks: BlockRef[];
     metadata: ChunkMetadata;
-    paragraphIds: string[];
   }): Promise<Chunk> {
-    const text = paragraphs.join("\n\n");
+    const content = blocks.map((b) => b.text).join("\n\n");
 
-    const tokenCount = await countTokens(text);
+    const tokenCount = await countTokens(content);
 
     if (tokenCount < 50) {
       logger.warn(`Very small chunk detected (${tokenCount} tokens)`);
@@ -156,11 +183,18 @@ export class Chunker {
       id: this.generateChunkId(documentId, chunkIndex),
       documentId,
       chunkIndex,
-      content: text,
+      content,
       tokenCount,
       metadata: {
         ...metadata,
-        paragraphIds,
+
+        blockIds: blocks.map((block) =>
+          this.parseBlockId(
+            block.pageNumber,
+            block.headingPath!,
+            block.blockId,
+          ),
+        ),
       },
     };
   }
@@ -174,53 +208,96 @@ export class Chunker {
   }
 
   // This method returns the tokens that satisfies the overlap
-  private async computeOverlap(
-    paragraphs: string[],
-    paragraphIds: string[],
-  ): Promise<Overlap> {
-    const overlap: Overlap = { overlapParagraphs: [], overlapIds: [] };
+  private async computeOverlap(blocks: BlockRef[]): Promise<{
+    overlapBlocks: BlockRef[];
+    overlapIds: string[];
+  }> {
+    const overlapBlocks: BlockRef[] = [];
 
     let tokenCount = 0;
 
-    for (let i = paragraphs.length - 1; i >= 0; i--) {
-      const paragraph = paragraphs[i]!;
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      const block = blocks[i]!;
 
-      const paragraphTokens = await countTokens(paragraph);
+      // Avoid duplicating large structural blocks.
+      if (block.type === "code" || block.type === "table") {
+        continue;
+      }
+
+      const blockTokens = await countTokens(block.text);
 
       if (
-        tokenCount + paragraphTokens > this.overlapTokens &&
-        overlap.overlapParagraphs.length > 0
+        tokenCount + blockTokens > this.overlapTokens &&
+        overlapBlocks.length > 0
       ) {
         break;
       }
 
-      overlap.overlapParagraphs.unshift(paragraph);
-      overlap.overlapIds.unshift(paragraphIds[i]!);
+      overlapBlocks.unshift(block);
 
-      tokenCount += paragraphTokens;
+      tokenCount += blockTokens;
     }
 
-    return overlap;
+    return {
+      overlapBlocks,
+
+      overlapIds: overlapBlocks.map((block) =>
+        this.parseBlockId(block.pageNumber, block.headingPath!, block.blockId),
+      ),
+    };
   }
 
-  private parseParagraphId(pageNumber: number, paraId: string): string {
-    return `page-${pageNumber}:${paraId}`;
+  private sameHeadingPath(a: string[], b: string[]): boolean {
+    if (a.length !== b.length) {
+      return false;
+    }
+
+    return a.every((value, index) => value === b[index]);
   }
 
-  private flattenDocument(document: ParsedDocument): ParagraphRef[] {
-    const refs: ParagraphRef[] = [];
+  private parseBlockId(
+    pageNumber: number | undefined,
+    headingPath: string[],
+    blockId: string,
+  ): string {
+    if (pageNumber) {
+      return `page-${pageNumber}:${blockId}`;
+    }
+
+    if (headingPath.length > 0) {
+      return `heading-${headingPath.join("/")}:${blockId}`;
+    }
+
+    return blockId;
+  }
+
+  private flattenDocument(document: ParsedDocument): BlockRef[] {
+    const blocks: BlockRef[] = [];
+
+    const headingStack: string[] = [];
+
+    let headingPath: string[] = [];
 
     for (const section of document.sections) {
-      for (const paragraph of section.paragraphs) {
-        refs.push({
-          text: paragraph.text,
-          paragraphId: paragraph.id,
-          pageNumber: section.pageNumber ?? 0,
-          heading: section.heading ?? "",
+      if (section.heading && section.headingLevel) {
+        headingPath = updateHeadingStack(
+          headingStack,
+          section.headingLevel,
+          section.heading,
+        );
+      }
+
+      for (const block of section.blocks) {
+        blocks.push({
+          blockId: block.id,
+          text: block.text,
+          type: block.type,
+          pageNumber: section.pageNumber!,
+          headingPath: [...headingPath],
         });
       }
     }
 
-    return refs;
+    return blocks;
   }
 }
