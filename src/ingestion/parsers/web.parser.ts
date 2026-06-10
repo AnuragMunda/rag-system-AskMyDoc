@@ -1,10 +1,16 @@
 import { v4 as uuidv4 } from "uuid";
 import jsdom from "jsdom";
 
-import { ParsedDocument, SourceType, WebSection } from "../types.js";
+import {
+  ParsedDocument,
+  ParsedSection,
+  SourceType,
+  WebSection,
+} from "../types.js";
 import { DocumentParser } from "./parser.interface.js";
 import { Readability } from "@mozilla/readability";
 import { logger } from "@/shared/logger/logger.js";
+import { updateHeadingStack } from "@/shared/utils/helper.js";
 
 export class WebParser implements DocumentParser {
   async parse(url: string): Promise<ParsedDocument> {
@@ -34,16 +40,19 @@ export class WebParser implements DocumentParser {
 
       // Step 4: Extract headings and paragraphs
       logger.info("Parsing started");
-      const sections = this.extractSections(document);
+      const sections = this.extractSections(document, article.title ?? "");
 
       // Step 5: Normalise extracted content into unified format
-      const parsedSection = sections.map((section) => ({
+      const parsedSection: ParsedSection[] = sections.map((section) => ({
         heading: section.heading!,
-        content: section.paragraphs.join("\n\n"),
-        paragraphs: section.paragraphs.map((para, index) => ({
-          id: `p${index + 1}`,
+        headingLevel: section.headingLevel!,
+        headingPath: section.headingPath,
+        content: section.blocks.map((block) => block.text).join("\n\n"),
+        blocks: section.blocks.map((block, index) => ({
+          id: `para-${index + 1}`,
           index,
-          text: para,
+          type: block.type,
+          text: block.text,
         })),
       }));
       logger.info("Parsing successful");
@@ -80,17 +89,30 @@ export class WebParser implements DocumentParser {
   }
 
   // Extracts content from the page
-  private extractSections(document: Document): WebSection[] {
+  private extractSections(document: Document, title: string): WebSection[] {
     const sections: WebSection[] = [];
 
     let currentSection: WebSection = {
-      heading: "",
-      paragraphs: [],
+      heading: "Introduction",
+      headingLevel: 0,
+      headingPath: [title, "Introduction"],
+      blocks: [],
     };
 
-    const elements = document.body.querySelectorAll(
-      "h1,h2,h3,h4,h5,h6,p,li,pre,code,dl",
+    let blockIndex = 0;
+
+    const elements: NodeListOf<Element> = document.body.querySelectorAll(
+      `
+    h1,h2,h3,h4,h5,h6,
+    p,
+    ul,
+    ol,
+    pre,
+    table,
+    dl
+    `,
     );
+    const headingStack: string[] = [title];
 
     elements.forEach((element) => {
       const tag = element.tagName.toLowerCase();
@@ -99,37 +121,84 @@ export class WebParser implements DocumentParser {
       if (!text) return;
 
       if (tag.startsWith("h")) {
+        const level = Number(tag.slice(1));
+
+        const headingPath = updateHeadingStack(headingStack, level, text);
+
         sections.push(currentSection);
 
         currentSection = {
           heading: text,
-          paragraphs: [],
+          headingLevel: level,
+          headingPath,
+          blocks: [],
         };
       }
 
       if (tag === "p") {
-        currentSection.paragraphs.push(text);
+        currentSection.blocks.push({
+          id: uuidv4(),
+          index: blockIndex++,
+          type: "definition",
+          text,
+        });
       }
 
       if (tag === "dl") {
-        currentSection.paragraphs.push(
-          ...this.extractDescriptionLists(element),
-        );
+        const definitions = this.extractDescriptionLists(element);
+
+        currentSection.blocks.push({
+          id: uuidv4(),
+          index: blockIndex++,
+          type: "definition",
+          text: definitions.join("\n"),
+        });
       }
 
-      if (tag === "li") {
-        currentSection.paragraphs.push(`• ${text}`);
+      if (tag === "ul" || tag === "ol") {
+        const items = Array.from(element.querySelectorAll("li"));
+
+        currentSection.blocks.push({
+          id: uuidv4(),
+          index: blockIndex++,
+          type: "list",
+          text: items.map((li) => li.textContent?.trim()).join("\n"),
+        });
       }
 
       if (tag === "pre") {
-        currentSection.paragraphs.push(`CODE_BLOCK:\n${text}`);
+        currentSection.blocks.push({
+          id: uuidv4(),
+          index: blockIndex++,
+          type: "code",
+          text,
+        });
+      }
+
+      if (tag === "table") {
+        const rows = Array.from(element.querySelectorAll("tr"));
+
+        const text = rows
+          .map((row) =>
+            Array.from(row.querySelectorAll("th,td"))
+              .map((cell) => cell.textContent?.trim())
+              .join(" | "),
+          )
+          .join("\n");
+
+        currentSection.blocks.push({
+          id: uuidv4(),
+          index: blockIndex++,
+          type: "table",
+          text,
+        });
       }
     });
 
     sections.push(currentSection);
 
     return sections.filter(
-      (section) => section.heading || section.paragraphs.length > 0,
+      (section) => section.heading || section.blocks.length > 0,
     );
   }
 
@@ -151,12 +220,13 @@ export class WebParser implements DocumentParser {
 
     if (tag === "a") {
       const href = node.getAttribute("href");
+      if (href?.startsWith("http")) {
+        const replacement = href
+          ? `${node.textContent} (${href})`
+          : (node.textContent ?? "");
 
-      const replacement = href
-        ? `${node.textContent} (${href})`
-        : (node.textContent ?? "");
-
-      return replacement;
+        return replacement;
+      }
     }
 
     return Array.from(node.childNodes)

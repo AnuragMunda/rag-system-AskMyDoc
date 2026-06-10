@@ -46,8 +46,8 @@ export class PdfParser implements DocumentParser {
       // Step 5: Clean text in each section
       sections.forEach((section) => {
         section.content = cleanText(section.content);
-        section.paragraphs.forEach((para) => {
-          para.text = cleanText(para.text);
+        section.blocks.forEach((block) => {
+          block.text = cleanText(block.text);
         });
       });
       logger.info(`Parsing successful`);
@@ -115,10 +115,11 @@ export class PdfParser implements DocumentParser {
       page.push({
         pageNumber: pageNum,
         content: pageText,
-        paragraphs: pageText.split("\n\n").map((para, index) => ({
-          id: `para-${index + 1}`,
+        blocks: pageText.split("\n\n").map((block, index) => ({
+          id: `block-${index + 1}`,
           index,
-          text: para.trim(),
+          type: "paragraph",
+          text: block.trim(),
         })),
       });
 
@@ -129,7 +130,7 @@ export class PdfParser implements DocumentParser {
     return page;
   }
 
-  // This method reconstructs paragraphs based on the Y position of text items
+  // This method reconstructs blocks based on the Y position of text items
   private buildParagraphs(items: any[], pageHeight: number): string {
     const lines: PdfLine[] = []; // To store the reconstructed lines
     const gapsY: number[] = []; // To store the gaps between lines for median calculation
@@ -178,7 +179,7 @@ export class PdfParser implements DocumentParser {
     }
 
     const medianGap = findMedian(gapsY.sort((a, b) => a - b));
-    const paragraphs: string[] = [];
+    const blocks: string[] = [];
 
     let currentParagraph = lines[0]!.text;
 
@@ -190,13 +191,13 @@ export class PdfParser implements DocumentParser {
       const isParagraphBreak = gap > medianGap * 1.3;
 
       if (isParagraphBreak) {
-        paragraphs.push(currentParagraph.trim());
+        blocks.push(currentParagraph.trim());
         currentParagraph = current.text;
       } else {
         currentParagraph += " " + current.text;
       }
     }
-    paragraphs.push(currentParagraph.trim());
-    return paragraphs.join("\n\n");
+    blocks.push(currentParagraph.trim());
+    return blocks.join("\n\n");
   }
 }
