@@ -1,4 +1,4 @@
-import { ParserFactory } from "../../src/ingestion/factory/parser.factory.js";
+import { ParserFactory } from "../../../src/ingestion/factory/parser.factory.js";
 
 const main = async () => {
   const parser = ParserFactory.create("web");

@@ -1,7 +1,7 @@
-import { Chunker } from "../../src/ingestion/chunking/chunker";
-import { ingest } from "../../src/ingestion/ingest";
+import { Chunker } from "../../../src/ingestion/chunking/chunker";
+import { ingest } from "../../../src/ingestion/ingest";
 
-async function main() {
+const main = async () => {
   const pdf = await ingest("./tests/fixtures/pdfs/MythOfAGI.pdf");
   console.log(pdf.title, pdf.sourceType);
 
