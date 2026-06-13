@@ -81,3 +81,7 @@ yarn.lock
 
 # Ignore temporary project files
 *.log
+
+# Chroma DB
+getting-started/
+chroma/
