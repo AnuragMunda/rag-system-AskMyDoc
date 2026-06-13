@@ -6,11 +6,10 @@ import {
   Chunk,
   ChunkerOptions,
   ChunkMetadata,
-  ParsedDocument,
-  SourceType,
-} from "../../shared/types/ingestion.types.js";
+} from "@/shared/types/chunking.types.js";
 import { countTokens } from "./tokeniser.js";
 import { updateHeadingStack } from "@/shared/utils/helper.js";
+import { ParsedDocument, SourceType } from "@/shared/types/ingestion.types.js";
 
 export class Chunker {
   private readonly maxTokens: number;
@@ -23,31 +22,36 @@ export class Chunker {
 
   // The main method to chunk a document
   async chunkDocument(document: ParsedDocument): Promise<Chunk[]> {
-    logger.info(
-      { documentType: document.sourceType, source: document.source },
-      `Starting Chunking`,
-    );
+    try {
+      logger.info(
+        { documentType: document.sourceType, source: document.source },
+        `Starting Chunking`,
+      );
+      // Step 1: Flatten the document
+      const blocks = this.flattenDocument(document);
+      logger.info("Document Flattened");
 
-    // Step 1: Flatten the document
-    const blocks = this.flattenDocument(document);
-    logger.info("Document Flattened");
+      // Step 2: Build chunks
+      logger.info("Building chunks");
+      logger.info("...............");
+      const chunks = await this.buildChunks(
+        blocks,
+        document.id,
+        document.sourceType,
+        document.source,
+      );
+      logger.info("...............");
+      logger.info({ chunksGenerated: chunks.length }, "Chunking successful");
+      logger.info(
+        "\n<--------------------------------------------------------->\n",
+      );
 
-    // Step 2: Build chunks
-    logger.info("Building chunks");
-    logger.info("...............");
-    const chunks = await this.buildChunks(
-      blocks,
-      document.id,
-      document.sourceType,
-      document.source,
-    );
-    logger.info("...............");
-    logger.info({ chunksGenerated: chunks.length }, "Chunking successful");
-    logger.info(
-      "\n<--------------------------------------------------------->\n",
-    );
-
-    return chunks;
+      return chunks;
+    } catch (error) {
+      throw new Error(
+        `Failed to chunk document: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    }
   }
 
   // This method carry out the entire process of build chunks from a flatten document
