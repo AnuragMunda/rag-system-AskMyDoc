@@ -1,6 +1,6 @@
-import { Chunk } from "@/ingestion/types.js";
-import { GeminiEmbedder } from "./gemini.embedder.js";
-import { EmbeddedChunk } from "./types.js";
+import { Chunk } from "@/shared/types/chunking.types.js";
+import { GeminiEmbedder } from "./embedder/gemini.embedder.js";
+import { EmbeddedChunk } from "@/shared/types/embedding.types.js";
 
 export class EmbeddingService {
   constructor(private readonly embedder: GeminiEmbedder) {}

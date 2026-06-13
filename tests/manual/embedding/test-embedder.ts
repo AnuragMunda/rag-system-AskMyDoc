@@ -1,4 +1,4 @@
-import { gemini } from "./../../../src/config/constants";
+import { gemini } from "../../../src/config/constants";
 import { GeminiEmbedder } from "./../../../src/embeddings/gemini.embedder";
 
 const main = async () => {

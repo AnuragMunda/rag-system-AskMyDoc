@@ -1,4 +1,4 @@
-import { Chunker } from "../../../src/ingestion/chunking/chunker";
+import { Chunker } from './../../../src/chunking/chunker';
 import { ingest } from "../../../src/ingestion/ingest";
 
 const main = async () => {
@@ -24,6 +24,6 @@ const main = async () => {
     );
     // console.log("Chunks: ", pdfChunks);
   }, 1000);
-}
+};
 
 main();

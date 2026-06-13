@@ -4,7 +4,7 @@ import { MarkdownParser } from "../parsers/markdown.parser.js";
 import { DocumentParser } from "../parsers/parser.interface.js";
 import { PdfParser } from "../parsers/pdf.parser.js";
 import { WebParser } from "../parsers/web.parser.js";
-import { SourceType } from "../types.js";
+import { SourceType } from "@/shared/types/ingestion.types.js";
 
 export class ParserFactory {
   private static parsers = new Map();

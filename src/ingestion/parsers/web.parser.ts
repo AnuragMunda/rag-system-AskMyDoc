@@ -6,7 +6,7 @@ import {
   ParsedSection,
   SourceType,
   WebSection,
-} from "../types.js";
+} from "@/shared/types/ingestion.types.js";
 import { DocumentParser } from "./parser.interface.js";
 import { Readability } from "@mozilla/readability";
 import { logger } from "@/shared/logger/logger.js";

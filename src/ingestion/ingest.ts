@@ -1,5 +1,5 @@
+import { ParsedDocument } from "@/shared/types/ingestion.types.js";
 import { ParserFactory } from "./factory/parser.factory.js";
-import { ParsedDocument } from "./types.js";
 
 export const ingest = async (source: string): Promise<ParsedDocument> => {
   const parser = ParserFactory.createFromSource(source);

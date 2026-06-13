@@ -8,7 +8,7 @@ import {
   ChunkMetadata,
   ParsedDocument,
   SourceType,
-} from "../types.js";
+} from "../../shared/types/ingestion.types.js";
 import { countTokens } from "./tokeniser.js";
 import { updateHeadingStack } from "@/shared/utils/helper.js";
 

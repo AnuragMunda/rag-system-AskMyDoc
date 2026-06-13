@@ -10,7 +10,7 @@ import {
   ParsedSection,
   PdfLine,
   SourceType,
-} from "../types.js";
+} from "@/shared/types/ingestion.types.js";
 import { logger } from "@/shared/logger/logger.js";
 import { cleanText } from "../cleaners/clean-text.js";
 import { findMedian } from "@/shared/utils/statistics.js";
@@ -142,7 +142,6 @@ export class PdfParser implements DocumentParser {
     const FOOTER_MARGIN = pageHeight * 0.1;
 
     for (const item of items) {
-      
       if (!("str" in item) || item.height < 10) continue;
 
       // If the text item is just a page number, skip it

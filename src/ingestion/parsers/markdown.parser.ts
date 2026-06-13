@@ -11,7 +11,7 @@ import {
   ParsedDocument,
   ParsedSection,
   SourceType,
-} from "../types.js";
+} from "@/shared/types/ingestion.types.js";
 import { DocumentParser } from "./parser.interface.js";
 import { logger } from "@/shared/logger/logger.js";
 import remarkGfm from "remark-gfm";
