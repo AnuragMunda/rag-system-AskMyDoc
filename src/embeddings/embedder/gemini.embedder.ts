@@ -1,3 +1,7 @@
+import {
+  geminiListEmbeddingModel,
+  geminiSingleEmbeddingModel,
+} from "@/config/constants.js";
 import { GoogleGenAI } from "@google/genai";
 
 export class GeminiEmbedder {
@@ -6,7 +10,7 @@ export class GeminiEmbedder {
   // This method produces embedding for a single text input
   async embed(text: string): Promise<number[]> {
     const response = await this.client.models.embedContent({
-      model: "gemini-embedding-2",
+      model: geminiSingleEmbeddingModel,
       contents: text,
     });
 
@@ -20,7 +24,7 @@ export class GeminiEmbedder {
   // This method produces a list of embeddings for mulitple text input
   async embedBatch(texts: string[]): Promise<number[][]> {
     const response = await this.client.models.embedContent({
-      model: "gemini-embedding-001",
+      model: geminiListEmbeddingModel,
       contents: texts,
     });
 

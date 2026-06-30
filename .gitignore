@@ -85,3 +85,4 @@ yarn.lock
 # Chroma DB
 getting-started/
 chroma/
+my_chroma_data
