@@ -1,112 +1,542 @@
-# Production RAG System
+# Ask My Docs
 
-## Project Definition
+> A production-oriented, domain-specific Retrieval-Augmented Generation (RAG) system built with TypeScript.
 
-This is a domain-specific "Ask My Docs" system with hybrid retrieval (BM25 + vector search), cross-encoder re-ranking, citation enforcement, and a CI-gated evaluation pipeline.
+Ask My Docs is a modular RAG application capable of ingesting PDFs, Markdown files, and technical web documentation, indexing them into a vector database, and answering questions with traceable citations.
 
-We pick a corpus of documents such as Technical documentation, Research paper, Legal contracts, or Health care document. And we build a system that retrieves the right information, answers and Questions with proper **_citations_**.
+Unlike many simple RAG demos, this project is designed with production architecture in mind. It emphasizes document structure preservation, metadata tracking, modular components, and an extensible retrieval pipeline that can evolve into a fully production-ready knowledge system.
 
-## Foundation
+---
 
-### Target Domain/Corpus
+# Features
 
-Developer Docs + Runbooks”(mix of Markdown + PDFs + a few web pages).
+## Document Ingestion
 
-### User Personas
+- PDF ingestion
+- Markdown ingestion
+- Technical documentation/web page ingestion
+- Unified parsing pipeline
+- Automatic metadata extraction
 
-- **Personas**
-  - Persona 1: On-call engineer - incident response, needs fast accurate steps + citations
-  - Persona 2: Backend dev - API usage, needs precise details and examples
-  - Persona 3: New joiner - onboarding, needs explainers + pointers to canonical docs
+## Document Parsing
 
-- **Primary query types**
-  - Troubleshooting (highest priority)
-  - How-to procedures
-  - API/reference lookups
-  - Config/examples
+Each document is parsed into a structured representation instead of raw text.
 
-### Must refuse (unanswerable) cases
+The parser preserves:
 
-- **No supporting evidence in retrieved context**
-  - Example: “What is the timeout for service X?” but no document/chunk mentions the timeout.
-- **Insufficient specificity / missing identifiers**
-  - Example: “Why is it failing?” without service name, environment, error message, or time window.
-- **Out of scope for the corpus**
-  - Example: “How do I set up my personal laptop?” if your corpus is only production runbooks.
-- **Requires real-time or external system state**
-  - Example: “Is the production DB currently down?” (unless you integrate monitoring; RAG alone can’t know).
-- **Policy/approval or access requests**
-  - Example: “Give me prod credentials” or “Grant me access to X.”
-- **Secrets / sensitive data extraction**
-  - Example: “What is the API key/password/token?” even if it appears in docs (should be blocked/redacted).
-- **Ambiguous/conflicting sources**
-  - Example: two runbooks disagree on a command; refuse or ask user to choose the canonical source/version.
-- **High-risk actions without sufficient guardrails**
-  - Example: “Delete the database” / “Run this irreversible command” — require explicit confirmation or refuse.
+- document metadata
+- sections
+- headings
+- page numbers (PDFs)
+- paragraphs
+- content blocks
 
-### Success criteria (initial targets)
+This enables precise retrieval and future citation support.
 
-- **Latency (P95 end-to-end)**
-  - MVP (no reranker): ≤ 4–6s
-  - Production (hybrid + reranker + verifier): ≤ 8–12s
-  - Also track stage budgets: retrieval ≤ 500ms, rerank ≤ 1.5s, generation ≤ 6s
-- **Cost per query**
-  - Target: ≤ $0.01–$0.05 per query (depends on model choice and context length)
-  - Hard guardrails:
-    - Context tokens sent to LLM: cap (e.g., ≤ 3k–6k tokens)
-    - Max chunks to generator: cap (e.g., M ≤ 8–12 after rerank)
-    - Cache embeddings + rerank results for repeated queries
-- **Faithfulness / groundedness**
-  - “Unsupported claim” rate (on golden set): ≤ 2–5%
-  - “Citation mismatch” rate (citation does not contain the claim): ≤ 1–2%
-  - Unanswerable handling: ≥ 95% of unanswerable questions should refuse (not hallucinate)
-- **Retrieval quality (so faithfulness is achievable)**
-  - Evidence recall@N: ≥ 90% (gold evidence appears in top-N retrieved candidates, e.g., N=20 before rerank)
-  - Post-rerank recall@M: ≥ 85% (gold evidence appears in top-M passed to generator, e.g., M=8–12)
-- **Product quality**
-  - User satisfaction (manual/heuristic during dev): ≥ 4/5 on a small test set
-  - Debuggability: every answer includes citations + query_id + prompt version in logs
+---
 
-## System Architecture
+## Intelligent Chunking
 
-| Concern                 | Tools            |
-| ----------------------- | ---------------- |
-| Orchestration           | LangChain        |
-| Vector DB               | ChromaDB         |
-| BM25 Engine             | ElasticSearch    |
-| Cross-encoder Re-ranker | Cohere Re-ranker |
-| Evaluation Framework    | Ragas            |
+Instead of splitting text arbitrarily, the chunker is document-aware.
 
-### Data Flow
+Features include:
 
-Document -> Parsing -> Chunking -> Embedding -> Storage -> Retrieval -> Re-ranking -> Answer generation -> Citation validation
+- configurable chunk size
+- configurable overlap
+- heading-aware chunk boundaries
+- metadata preservation
+- overlap without crossing section boundaries
+- source-independent chunking
 
-## Database Design
+Each chunk contains:
 
-### Document Schema
+- chunk id
+- document id
+- heading path
+- page number
+- source information
+- block identifiers
+- token count
 
-| Field Name                     | Data Type | Key / Constraints                                     | Description                                |
-| :----------------------------- | :-------- | :---------------------------------------------------- | :----------------------------------------- |
-| `doc_id`                       | String    | Primary Key                                           | Stable ID derived from the source.         |
-| `title`                        | String    | -                                                     | Human-readable title.                      |
-| `source_type`                  | Enum      | `pdf` \| `markdown` \| `html` \| `github` \| `notion` | The format/source of the document.         |
-| `source_uri`                   | String    | -                                                     | Canonicalized file path or URL.            |
-| `content_hash` / `doc_version` | String    | -                                                     | SHA256 of the extracted + normalized text. |
+---
 
-### Chunk Schema
+## Embeddings
 
-| Field Name     | Data Type            | Key / Constraints               | Description                                                                                       |
-| :------------- | :------------------- | :------------------------------ | :------------------------------------------------------------------------------------------------ |
-| `chunk_id`     | String               | Primary Key                     | Stable unique ID for the chunk.                                                                   |
-| `doc_id`       | String               | Foreign Key (`Document.doc_id`) | Which document this chunk came from.                                                              |
-| `chunk_index`  | Integer              | -                               | Order of the chunk within the document ($0 \dots N-1$).                                           |
-| `text`         | String               | -                               | The actual chunk text used for retrieval and context.                                             |
-| `text_hash`    | String               | -                               | Hash of text (useful for deduplication and change detection).                                     |
-| `doc_version`  | String               | -                               | Inherited from `Document.doc_version`.                                                            |
-| `source_uri`   | String               | -                               | Inherited from `Document.source_uri`.                                                             |
-| `title`        | String               | -                               | Inherited from `Document.title`.                                                                  |
-| `heading_path` | JSON Array (Strings) | -                               | Sequential headings for meaningful citation. <br>_Example:_ `["Payments", "Retries", "Timeouts"]` |
-| `page_start`   | Integer              | Nullable                        | Starting page number (null for non-PDFs).                                                         |
-| `page_end`     | Integer              | Nullable                        | Ending page number (null for non-PDFs).                                                           |
-| `ingested_at`  | DateTime             | -                               | Timestamp of when the chunk was processed.                                                        |
-| `metadata`     | JSON                 | -                               | Flexible bucket for extra fields.                                                                 |
+The application generates vector embeddings for every chunk using Gemini's embedding models.
+
+Features:
+
+- batch embeddings
+- pluggable embedding providers
+- reusable embedding service
+- deterministic chunk ids
+
+---
+
+## Vector Storage
+
+Embeddings are stored inside ChromaDB.
+
+Stored metadata includes:
+
+- document id
+- chunk id
+- heading path
+- page number
+- source
+- source type
+- block ids
+
+---
+
+## Semantic Retrieval
+
+Supports semantic similarity search using vector embeddings.
+
+Pipeline:
+
+User Query
+
+↓
+
+Query Embedding
+
+↓
+
+Vector Search
+
+↓
+
+Top-K Retrieval
+
+↓
+
+Context Assembly
+
+---
+
+## Context Assembly
+
+Retrieved chunks are transformed into a structured prompt context before being passed to the language model.
+
+The context builder:
+
+- preserves source information
+- preserves heading hierarchy
+- preserves chunk identifiers
+- limits context size
+- prepares the prompt for the LLM
+
+---
+
+## Answer Generation
+
+The LLM answers questions using **only retrieved context**.
+
+The assistant:
+
+- refuses to answer when context is insufficient
+- generates inline citations
+- returns structured citation metadata
+- never accesses the original documents directly
+
+---
+
+# Example
+
+Question
+
+> Why does the paper argue that AGI existential risk is unrealistic?
+
+Answer
+
+> The paper argues that AGI doomer scenarios rely on three unsupported assumptions, including anthropomorphism and the idea that superior intelligence automatically grants unlimited power. [D1]
+
+Citations
+
+- MythOfAGI.pdf
+- Page 2
+- Executive Summary
+
+---
+
+# Project Structure
+
+```text
+src/
+  ├── index.ts
+  ├── api/
+  │   ├── controllers/
+  │   ├── middleware/
+  │   └── routes/
+  ├── chunking/
+  │   ├── chunker.ts
+  │   └── tokeniser.ts
+  ├── citations/
+  ├── config/
+  │   ├── constants.ts
+  │   └── env.ts
+  ├── embeddings/
+  │   ├── embedding.service.ts
+  │   └── embedder/
+  │       └── gemini.embedder.ts
+  ├── evaluation/
+  ├── ingestion/
+  │   ├── ingest.ts
+  │   ├── cleaners/
+  │   │   └── clean-text.ts
+  │   ├── factory/
+  │   │   └── parser.factory.ts
+  │   └── parsers/
+  │       ├── parser.interface.ts
+  │       ├── markdown.parser.ts
+  │       ├── pdf.parser.ts
+  │       └── web.parser.ts
+  ├── llm/
+  │   ├── answer-generator.ts
+  │   └── prompt-builder.ts
+  ├── pipelines/
+  │   ├── generation.pipeline.ts
+  │   └── indexing.pipeline.ts
+  ├── retrieval/
+  │   └── retrieval.service.ts
+  ├── shared/
+  │   ├── logger/
+  │   │   └── logger.ts
+  │   ├── types/
+  │   │   ├── chunking.types.ts
+  │   │   ├── embedding.types.ts
+  │   │   ├── generation.types.ts
+  │   │   ├── ingestion.types.ts
+  │   │   ├── retrieval.types.ts
+  │   │   └── store.types.ts
+  │   └── utils/
+  │       ├── helper.ts
+  │       └── statistics.ts
+  └── vector-store/
+      └── chroma.store.ts
+```
+
+---
+
+# Architecture
+
+```text
+                     +----------------+
+                     |    Document    |
+                     +----------------+
+                              |
+                              |
+                     Parser Factory
+                              |
+        +---------------------+--------------------+
+        |                     |                    |
+       PDF               Markdown             Web Docs
+        |                     |                    |
+        +---------------------+--------------------+
+                              |
+                     Parsed Document
+                              |
+                              |
+                          Chunker
+                              |
+                       Metadata Preserved
+                              |
+                          Embeddings
+                              |
+                          ChromaDB
+                              |
+                     Semantic Retrieval
+                              |
+                     Retrieved Chunks
+                              |
+                     Context Assembly
+                              |
+                        Prompt Builder
+                              |
+                          Gemini LLM
+                              |
+                  Answer + Structured Citations
+```
+
+---
+
+# Technology Stack
+
+| Layer           | Technology             |
+| --------------- | ---------------------- |
+| Language        | TypeScript             |
+| Runtime         | Node.js                |
+| LLM             | Gemini                 |
+| Embeddings      | text-embedding-3-small |
+| Vector Database | ChromaDB               |
+| Parsing         | Custom parsers         |
+| Tokenization    | tiktoken               |
+| Logging         | Pino                   |
+
+---
+
+# Prerequisites
+
+- Node.js >= 20
+- pnpm
+- Docker (recommended for ChromaDB)
+- Gemini API key
+
+---
+
+# Installation
+
+Clone the repository
+
+```bash
+git clone <repository-url>
+cd ask-my-docs
+```
+
+Install dependencies
+
+```bash
+pnpm install
+```
+
+---
+
+# Environment Variables
+
+Create a `.env` file.
+
+```env
+GEMINI_API_KEY=your_api_key
+CHROMA_URL=http://localhost:8000
+```
+
+---
+
+# Running ChromaDB
+
+Using Docker:
+
+```yaml
+services:
+  chroma:
+    image: chromadb/chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+
+volumes:
+  chroma-data:
+```
+
+Run
+
+```bash
+docker compose up -d
+```
+
+---
+
+# Running the Project
+
+Development
+
+```bash
+pnpm dev
+```
+
+Build
+
+```bash
+pnpm build
+```
+
+---
+
+# Ingestion Pipeline
+
+```text
+Document
+
+↓
+
+Parser
+
+↓
+
+Parsed Document
+
+↓
+
+Chunker
+
+↓
+
+Embeddings
+
+↓
+
+ChromaDB
+```
+
+---
+
+# Retrieval Pipeline
+
+```text
+Question
+
+↓
+
+Query Embedding
+
+↓
+
+Vector Search
+
+↓
+
+Top K Chunks
+
+↓
+
+Prompt Builder
+
+↓
+
+Gemini
+
+↓
+
+Answer
+```
+
+---
+
+# Current Capabilities
+
+- ✅ PDF ingestion
+- ✅ Markdown ingestion
+- ✅ Technical web documentation ingestion
+- ✅ Structured parsing
+- ✅ Intelligent chunking
+- ✅ Metadata preservation
+- ✅ Gemini embeddings
+- ✅ ChromaDB integration
+- ✅ Semantic retrieval
+- ✅ Context assembly
+- ✅ Answer generation
+- ✅ Inline citations
+- ✅ Structured citation metadata
+
+---
+
+# Design Principles
+
+This project focuses on building production-quality RAG systems.
+
+Core principles include:
+
+- modular architecture
+- source-independent ingestion
+- document-aware chunking
+- deterministic chunk ids
+- metadata preservation
+- traceable citations
+- interchangeable embedding providers
+- extensible retrieval pipeline
+
+---
+
+# Roadmap
+
+## Phase 1 — Core RAG (Completed)
+
+- [x] Multi-source document ingestion
+- [x] Parser factory
+- [x] Intelligent chunking
+- [x] Metadata preservation
+- [x] Embeddings
+- [x] ChromaDB integration
+- [x] Semantic retrieval
+- [x] Context assembly
+- [x] Answer generation
+- [x] Structured citations
+
+---
+
+## Phase 2 — Production Retrieval (In Progress)
+
+- [ ] Hybrid Retrieval (BM25 + Vector Search)
+- [ ] Reciprocal Rank Fusion (RRF)
+- [ ] Cross Encoder Re-ranking
+- [ ] Citation enforcement
+- [ ] Prompt versioning
+- [ ] Configurable retrieval pipeline
+- [ ] Multi-document querying
+
+---
+
+## Phase 3 — Evaluation & Quality
+
+- [ ] Golden evaluation dataset
+- [ ] RAGAS integration
+- [ ] Faithfulness evaluation
+- [ ] Context precision evaluation
+- [ ] Answer correctness evaluation
+- [ ] Automated evaluation scripts
+- [ ] CI/CD quality gates
+
+---
+
+## Future Enhancements
+
+- [ ] Weaviate support
+- [ ] Local embedding models
+- [ ] Streaming responses
+- [ ] Incremental indexing
+- [ ] OCR support
+- [ ] Image extraction
+- [ ] Table-aware retrieval
+- [ ] Knowledge graph integration
+- [ ] Multi-modal RAG
+- [ ] User authentication
+- [ ] Web UI
+- [ ] REST API
+- [ ] Dockerized deployment
+- [ ] Kubernetes deployment
+
+---
+
+# Why This Project?
+
+Many RAG examples stop after:
+
+```
+PDF
+↓
+Vector Database
+↓
+LLM
+↓
+Answer
+```
+
+This project aims to demonstrate how production RAG systems are actually built by emphasizing:
+
+- modular architecture
+- reusable components
+- structured document parsing
+- metadata preservation
+- retrieval quality
+- citation traceability
+- production-ready extensibility
+
+The long-term goal is to evolve this project into a complete production-grade document intelligence platform capable of supporting enterprise knowledge bases, technical documentation, research papers, and domain-specific assistants.
+
+---
+
+# License
+
+MIT
