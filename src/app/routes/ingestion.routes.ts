@@ -58,6 +58,7 @@ ingestFile.post("/file", upload.single("file"), async (req, res) => {
     logger.info({ originalname: file.originalname }, "File uploaded");
 
     const parsed = await ingest(file.path);
+    parsed.title = path.basename(file.originalname, path.extname(file.originalname));
     const collectionName = `doc-${parsed.id}`;
 
     const chunker = new Chunker();
