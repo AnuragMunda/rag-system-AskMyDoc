@@ -11,7 +11,7 @@ export function updateHeadingStack(
 }
 
 export function extractPromptIds(answer: string): string[] {
-  const matches = answer.match(/\[D\d+\]/g) ?? [];
+  const matches = answer.match(/\[C\d+\]/g) ?? [];
 
   return [...new Set(matches.map((match) => match.slice(1, -1)))];
 }

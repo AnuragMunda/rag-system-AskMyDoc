@@ -1,6 +1,7 @@
 import { AnswerGenerator } from "@/llm/answer-generator.js";
 import { PromptBuilder } from "@/llm/prompt-builder.js";
 import { RetrievalService } from "@/retrieval/retrieval.service.js";
+import { countTokens } from "@/chunking/tokeniser.js";
 import {
   Citation,
   GeneratedAnswer,
@@ -15,13 +16,23 @@ export class GenerationPipeline {
     private readonly answerGenerator: AnswerGenerator,
   ) {}
 
+  /**
+   * Runs the full generation pipeline: retrieve relevant chunks, build a
+   * prompt context, generate an answer from the LLM, and extract inline
+   * citations. Returns debug metrics for the UI panel.
+   */
   async generateAnswer(query: string): Promise<GeneratedAnswer> {
     const retrieved = await this.retrieval.retrieve(query, { topK: 8 });
 
     const context = this.promptBuilder.buildContext(retrieved);
-    const prompt = await this.promptBuilder.buildPrompt(query, context);
+    const { prompt, contextTokens } = await this.promptBuilder.buildPrompt(
+      query,
+      context,
+    );
 
     const answer = await this.answerGenerator.generate(prompt);
+
+    const totalTokens = await countTokens(prompt);
 
     const citations = this.buildCitations(answer, context);
 
@@ -29,6 +40,11 @@ export class GenerationPipeline {
       answer,
       citations,
       retrievedChunks: retrieved,
+      debug: {
+        totalTokens,
+        retrievedCount: retrieved.length,
+        contextTokens,
+      },
     };
   }
 

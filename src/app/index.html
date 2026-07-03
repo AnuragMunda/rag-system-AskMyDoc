@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ask My Docs</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #f4f5f7;
+      color: #1a1a2e;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    /* ── App shell ────────────────────────────────────────────────── */
+    .app { max-width: 1100px; width: 100%; }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      padding: 20px 24px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: #6b7280;
+      margin-bottom: 12px;
+    }
+
+    /* ── Header ───────────────────────────────────────────────────── */
+    .header { text-align: center; padding: 28px 24px 20px; }
+    .header h1 {
+      font-size: 26px;
+      font-weight: 700;
+      color: #111827;
+    }
+    .header p {
+      font-size: 14px;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+
+    /* ── Document selector ────────────────────────────────────────── */
+    .selector-row { display: flex; gap: 10px; align-items: center; }
+    .selector-row select {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+      background: #fff;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .selector-row select:focus { border-color: #6366f1; }
+    .selector-row select:disabled {
+      background: #f9fafb;
+      color: #9ca3af;
+    }
+    .btn-danger {
+      background: #ef4444;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s;
+      white-space: nowrap;
+    }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-danger:disabled { background: #fca5a5; cursor: not-allowed; }
+    .selector-empty {
+      color: #9ca3af;
+      font-style: italic;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    /* ── Ingest ────────────────────────────────────────────────────── */
+    .ingest-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .ingest-row label { font-size: 14px; font-weight: 500; color: #374151; }
+    .ingest-row input[type="file"] { font-size: 13px; }
+    .ingest-url { display: flex; gap: 8px; flex: 1; min-width: 280px; }
+    .ingest-url input[type="text"] {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .ingest-url input[type="text"]:focus { border-color: #6366f1; }
+    .ingest-separator {
+      color: #9ca3af;
+      font-size: 13px;
+      padding: 0 4px;
+    }
+    .ingest-status {
+      margin-top: 10px;
+      font-size: 13px;
+    }
+    .ingest-status.success { color: #059669; }
+    .ingest-status.error { color: #dc2626; }
+    .ingest-status.loading { color: #6366f1; }
+
+    /* ── Buttons ──────────────────────────────────────────────────── */
+    button {
+      background: #6366f1;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s;
+      white-space: nowrap;
+    }
+    button:hover { background: #4f46e5; }
+    button:disabled {
+      background: #a5b4fc;
+      cursor: not-allowed;
+    }
+
+    /* ── Query ─────────────────────────────────────────────────────── */
+    .query-row { display: flex; gap: 10px; }
+    .query-row input[type="text"] {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 15px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .query-row input[type="text"]:focus { border-color: #6366f1; }
+
+    /* ── Main content (two-column) ────────────────────────────────── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 720px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Answer panel ─────────────────────────────────────────────── */
+    .answer-area {
+      min-height: 180px;
+      font-size: 15px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .answer-area:empty::before {
+      content: "Ask a question above to see the answer here.";
+      color: #9ca3af;
+      font-style: italic;
+    }
+    .answer-area .citation {
+      display: inline-block;
+      background: #eef2ff;
+      color: #4f46e5;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .answer-area .citation:hover { background: #c7d2fe; }
+
+    /* ── Chunks panel ─────────────────────────────────────────────── */
+    .chunks-list { display: flex; flex-direction: column; gap: 10px; }
+    .chunk-card {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 12px 14px;
+      transition: border-color .2s, box-shadow .2s;
+      scroll-margin-top: 8px;
+    }
+    .chunk-card.highlight {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99,102,241,.25);
+    }
+    .chunk-card .chunk-heading {
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 4px;
+    }
+    .chunk-card .chunk-source {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+    .chunk-card .chunk-score {
+      font-size: 12px;
+      color: #6366f1;
+      font-weight: 500;
+    }
+    .chunk-card .chunk-preview {
+      font-size: 13px;
+      color: #4b5563;
+      margin-top: 6px;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .chunks-empty {
+      color: #9ca3af;
+      font-style: italic;
+      font-size: 14px;
+    }
+
+    /* ── Debug bar ────────────────────────────────────────────────── */
+    .debug-bar {
+      display: flex;
+      gap: 24px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+    .debug-bar .stat { display: flex; gap: 6px; align-items: center; }
+    .debug-bar .stat-label { font-weight: 500; }
+    .debug-bar .stat-value { font-weight: 600; color: #374151; }
+    .debug-bar:empty::before {
+      content: "Debug stats will appear after a query.";
+      font-style: italic;
+    }
+
+    /* ── Loading spinner ──────────────────────────────────────────── */
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #e5e7eb;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <!-- ════════════  Header  ════════════ -->
+    <div class="card header">
+      <h1>Ask My Docs</h1>
+      <p>Upload documents, ask questions, get cited answers.</p>
+    </div>
+
+    <!-- ════════════  Ingestion  ════════════ -->
+    <div class="card">
+      <div class="card-title">Upload PDF / Markdown / URL</div>
+      <div class="ingest-row">
+        <label for="fileInput">📄 File:</label>
+        <input type="file" id="fileInput" accept=".pdf,.md,.markdown" />
+        <button id="ingestFileBtn">Ingest</button>
+
+        <span class="ingest-separator">or</span>
+
+        <div class="ingest-url">
+          <input type="text" id="urlInput" placeholder="https://example.com/docs" />
+          <button id="ingestUrlBtn">Ingest URL</button>
+        </div>
+      </div>
+      <div id="ingestStatus" class="ingest-status"></div>
+    </div>
+
+    <!-- ════════════  Document selector  ════════════ -->
+    <div class="card">
+      <div class="card-title">Select Document</div>
+      <div class="selector-row">
+        <select id="docSelector" disabled>
+          <option value="">-- No documents ingested --</option>
+        </select>
+        <button id="clearAllBtn" class="btn-danger" disabled>Clear All</button>
+      </div>
+      <div id="selectorEmpty" class="selector-empty">
+        Ingest a document above, then select it here before searching.
+      </div>
+    </div>
+
+    <!-- ════════════  Query  ════════════ -->
+    <div class="card">
+      <div class="card-title">Ask a Question</div>
+      <div class="query-row">
+        <input
+          type="text"
+          id="queryInput"
+          placeholder="e.g. What does the paper say about AGI risk?"
+        />
+        <button id="searchBtn">Search</button>
+      </div>
+    </div>
+
+    <!-- ════════════  Main content (answer + chunks)  ════════════ -->
+    <div class="main-grid">
+      <div class="card">
+        <div class="card-title">Answer</div>
+        <div id="answerArea" class="answer-area"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Retrieved Chunks</div>
+        <div id="chunksList" class="chunks-list">
+          <span class="chunks-empty">
+            Retrieved chunks will appear here after a search.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════  Debug bar  ════════════ -->
+    <div class="card">
+      <div class="card-title">Debug</div>
+      <div id="debugBar" class="debug-bar"></div>
+    </div>
+
+  </div>
+
+  <script>
+    // ── DOM references ────────────────────────────────────────────
+    const fileInput       = document.getElementById("fileInput");
+    const ingestFileBtn   = document.getElementById("ingestFileBtn");
+    const urlInput        = document.getElementById("urlInput");
+    const ingestUrlBtn    = document.getElementById("ingestUrlBtn");
+    const ingestStatus    = document.getElementById("ingestStatus");
+    const docSelector     = document.getElementById("docSelector");
+    const clearAllBtn     = document.getElementById("clearAllBtn");
+    const selectorEmpty   = document.getElementById("selectorEmpty");
+    const queryInput      = document.getElementById("queryInput");
+    const searchBtn       = document.getElementById("searchBtn");
+    const answerArea      = document.getElementById("answerArea");
+    const chunksList      = document.getElementById("chunksList");
+    const debugBar        = document.getElementById("debugBar");
+
+    // ── Utility ───────────────────────────────────────────────────
+    function setIngestStatus(text, type) {
+      ingestStatus.textContent = text;
+      ingestStatus.className = "ingest-status" + (type ? " " + type : "");
+    }
+
+    function setLoading(button, loading) {
+      button.disabled = loading;
+      button.innerHTML = loading
+        ? '<span class="spinner"></span>' + button.dataset.loadingText
+        : button.dataset.originalText;
+    }
+
+    [ingestFileBtn, ingestUrlBtn, searchBtn].forEach(btn => {
+      btn.dataset.originalText = btn.textContent;
+      btn.dataset.loadingText  = btn.textContent;
+    });
+
+    // ── Document selector management ──────────────────────────────
+
+    /** Updates the selector and Clear All button enabled states. */
+    function updateSelectorState() {
+      const hasDocs = docSelector.options.length > 0;
+      docSelector.disabled = !hasDocs;
+      clearAllBtn.disabled = !hasDocs;
+      selectorEmpty.style.display = hasDocs ? "none" : "block";
+      if (!hasDocs) {
+        docSelector.innerHTML = '<option value="">-- No documents ingested --</option>';
+      }
+    }
+
+    /** Adds a document entry to the selector and selects it. */
+    function addToSelector(doc) {
+      // Remove the placeholder option if present
+      if (docSelector.options.length === 1 && docSelector.options[0].value === "") {
+        docSelector.innerHTML = "";
+      }
+
+      const opt = document.createElement("option");
+      opt.value = doc.collectionName;
+      opt.textContent = `${doc.title} (${doc.sourceType}, ${doc.chunkCount} chunks)`;
+      docSelector.appendChild(opt);
+      docSelector.value = doc.collectionName;
+      updateSelectorState();
+    }
+
+    /** Fetches all ingested collections and populates the selector. */
+    async function loadCollections() {
+      try {
+        const res = await fetch("/api/collections");
+        const collections = await res.json();
+
+        docSelector.innerHTML = "";
+
+        if (collections.length === 0) {
+          updateSelectorState();
+          return;
+        }
+
+        collections.forEach(doc => {
+          const opt = document.createElement("option");
+          opt.value = doc.name;
+          opt.textContent = `${doc.title} (${doc.sourceType}, ${doc.chunkCount} chunks)`;
+          docSelector.appendChild(opt);
+        });
+
+        updateSelectorState();
+      } catch (err) {
+        console.error("Failed to load collections:", err);
+        updateSelectorState();
+      }
+    }
+
+    // ── Ingest file ───────────────────────────────────────────────
+    ingestFileBtn.addEventListener("click", async () => {
+      const file = fileInput.files?.[0];
+      if (!file) { setIngestStatus("Please select a file.", "error"); return; }
+
+      setLoading(ingestFileBtn, true);
+      setIngestStatus("Uploading and ingesting...", "loading");
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await fetch("/api/ingest/file", { method: "POST", body: formData });
+        const data = await res.json();
+        if (!res.ok) { setIngestStatus(data.error, "error"); return; }
+
+        setIngestStatus(
+          `Ingested "${data.title}" (${data.sourceType}) — ${data.chunkCount} chunk(s)`,
+          "success"
+        );
+        addToSelector({
+          collectionName: data.collectionName,
+          title: data.title,
+          sourceType: data.sourceType,
+          chunkCount: data.chunkCount,
+        });
+        fileInput.value = "";
+      } catch (err) {
+        setIngestStatus("Network error during file upload.", "error");
+      } finally {
+        setLoading(ingestFileBtn, false);
+      }
+    });
+
+    // ── Ingest URL ────────────────────────────────────────────────
+    ingestUrlBtn.addEventListener("click", async () => {
+      const url = urlInput.value.trim();
+      if (!url) { setIngestStatus("Please enter a URL.", "error"); return; }
+
+      setLoading(ingestUrlBtn, true);
+      setIngestStatus("Fetching and ingesting...", "loading");
+
+      try {
+        const res = await fetch("/api/ingest/url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+        if (!res.ok) { setIngestStatus(data.error, "error"); return; }
+
+        setIngestStatus(
+          `Ingested "${data.title}" (${data.sourceType}) — ${data.chunkCount} chunk(s)`,
+          "success"
+        );
+        addToSelector({
+          collectionName: data.collectionName,
+          title: data.title,
+          sourceType: data.sourceType,
+          chunkCount: data.chunkCount,
+        });
+        urlInput.value = "";
+      } catch (err) {
+        setIngestStatus("Network error during URL ingestion.", "error");
+      } finally {
+        setLoading(ingestUrlBtn, false);
+      }
+    });
+
+    // ── Clear all collections ─────────────────────────────────────
+    clearAllBtn.addEventListener("click", async () => {
+      if (!confirm("Delete all ingested documents? This cannot be undone.")) return;
+
+      setLoading(clearAllBtn, true);
+
+      try {
+        const res = await fetch("/api/collections");
+        const collections = await res.json();
+
+        for (const doc of collections) {
+          await fetch("/api/collections/" + encodeURIComponent(doc.name), { method: "DELETE" });
+        }
+
+        docSelector.innerHTML = "";
+        updateSelectorState();
+      } catch (err) {
+        console.error("Failed to clear collections:", err);
+      } finally {
+        setLoading(clearAllBtn, false);
+      }
+    });
+
+    // ── Search / query ────────────────────────────────────────────
+    searchBtn.addEventListener("click", async () => {
+      const query = queryInput.value.trim();
+      const collectionName = docSelector.value;
+      if (!query) return;
+
+      if (!collectionName) {
+        answerArea.textContent = "Please select a document first.";
+        chunksList.innerHTML = "";
+        debugBar.innerHTML = "";
+        return;
+      }
+
+      setLoading(searchBtn, true);
+      answerArea.innerHTML = "";
+      chunksList.innerHTML = '<span class="chunks-empty">Searching...</span>';
+      debugBar.innerHTML = "";
+
+      try {
+        const res = await fetch("/api/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, collectionName }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          answerArea.textContent = "Error: " + data.error;
+          chunksList.innerHTML = "";
+          return;
+        }
+
+        renderAnswer(data);
+        renderChunks(data.retrievedChunks);
+        renderDebug(data.debug);
+      } catch (err) {
+        answerArea.textContent = "Network error during search.";
+        chunksList.innerHTML = "";
+      } finally {
+        setLoading(searchBtn, false);
+      }
+    });
+
+    // ── Render answer with clickable citations ────────────────────
+    function renderAnswer(data) {
+      let html = data.answer.replace(
+        /\[(C\d+)\]/g,
+        '<span class="citation" data-cid="$1">$&</span>'
+      );
+      answerArea.innerHTML = html;
+
+      answerArea.querySelectorAll(".citation").forEach(el => {
+        el.addEventListener("click", () => {
+          const cid = el.dataset.cid;
+          const target = document.getElementById("chunk-" + cid);
+          if (target) {
+            target.classList.add("highlight");
+            target.scrollIntoView({ behavior: "smooth", block: "center" });
+            setTimeout(() => target.classList.remove("highlight"), 2000);
+          }
+        });
+      });
+    }
+
+    // ── Render retrieved chunks ───────────────────────────────────
+    function renderChunks(chunks) {
+      if (!chunks || chunks.length === 0) {
+        chunksList.innerHTML = '<span class="chunks-empty">No chunks retrieved.</span>';
+        return;
+      }
+
+      chunksList.innerHTML = chunks
+        .map((chunk, idx) => {
+          const cid = "C" + (idx + 1);
+          const heading = chunk.sourceType === "pdf"
+            ? "Page " + (chunk.pageNumber ?? "?")
+            : chunk.headingPath?.length
+              ? chunk.headingPath.join(" › ")
+              : "Untitled section";
+          return `
+            <div class="chunk-card" id="chunk-${cid}">
+              <div class="chunk-heading">${cid}: ${escapeHtml(heading)}</div>
+              <div class="chunk-source">${escapeHtml(chunk.source)}</div>
+              <div class="chunk-score">score: ${chunk.distance?.toFixed(4) ?? "N/A"}</div>
+              <div class="chunk-preview">${escapeHtml(chunk.content.slice(0, 220))}</div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+
+    // ── Render debug bar ──────────────────────────────────────────
+    function renderDebug(debug) {
+      if (!debug) { debugBar.innerHTML = ""; return; }
+      debugBar.innerHTML = `
+        <span class="stat">
+          <span class="stat-label">Tokens:</span>
+          <span class="stat-value">${debug.totalTokens ?? "\u2014"}</span>
+        </span>
+        <span class="stat">
+          <span class="stat-label">Retrieved:</span>
+          <span class="stat-value">${debug.retrievedCount ?? "\u2014"}</span>
+        </span>
+        <span class="stat">
+          <span class="stat-label">Context Tokens:</span>
+          <span class="stat-value">${debug.contextTokens ?? "\u2014"}</span>
+        </span>
+      `;
+    }
+
+    // ── Simple HTML escaping ──────────────────────────────────────
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // ── Keyboard shortcut: Enter to search ────────────────────────
+    queryInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") searchBtn.click();
+    });
+
+    // ── Init: load collections on page load ───────────────────────
+    loadCollections();
+  </script>
+</body>
+</html>

@@ -4,9 +4,16 @@ import { ChromaClient } from "chromadb";
 export class ChromaStore {
   private client = new ChromaClient();
 
-  async store(collectionName: string, embeddedChunks: EmbeddedChunk[]) {
+  async store(
+    collectionName: string,
+    embeddedChunks: EmbeddedChunk[],
+    collectionMetadata?: Record<string, string | number>,
+  ) {
     try {
-      const collection = await this.getOrCreateCollection(collectionName);
+      const collection = await this.getOrCreateCollection(
+        collectionName,
+        collectionMetadata,
+      );
 
       await collection.add({
         ids: embeddedChunks.map((ec) => ec.chunk.id),
@@ -37,9 +44,13 @@ export class ChromaStore {
     });
   }
 
-  private async getOrCreateCollection(collectionName: string) {
+  private async getOrCreateCollection(
+    collectionName: string,
+    metadata?: Record<string, string | number>,
+  ) {
     const collection = await this.client.getOrCreateCollection({
       name: collectionName,
+      ...(metadata ? { metadata } : {}),
     });
     return collection;
   }
@@ -49,5 +60,15 @@ export class ChromaStore {
       name: collectionName,
     });
     return collection;
+  }
+
+  /** Returns all collections in the database. */
+  async listCollections() {
+    return this.client.listCollections();
+  }
+
+  /** Deletes a single collection by name. */
+  async deleteCollection(name: string) {
+    return this.client.deleteCollection({ name });
   }
 }

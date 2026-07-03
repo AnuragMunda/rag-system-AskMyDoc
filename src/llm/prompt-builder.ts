@@ -12,10 +12,15 @@ export class PromptBuilder {
     }));
   }
 
-  async buildPrompt(query: string, context: PromptContext[]): Promise<string> {
-    const serializedContext = await this.serializeContext(context);
+  /** Builds the full prompt string from a query and context chunks. */
+  async buildPrompt(query: string, context: PromptContext[]): Promise<{
+    prompt: string;
+    contextTokens: number;
+  }> {
+    const { context: serializedContext, totalTokens: contextTokens } =
+      await this.serializeContext(context);
 
-    return `
+    const prompt = `
     You are a question-answering assistant.
     Answer ONLY using the provided context.
     If the answer cannot be found in the context, say:
@@ -23,7 +28,7 @@ export class PromptBuilder {
     For every claim, cite the chunk. Use ONLY the document identifiers provided below.
 
     Example:
-    The paper argues ... [D1]
+    The paper argues ... [C1]
 
     Do not invent identifiers.
 
@@ -33,9 +38,19 @@ export class PromptBuilder {
     QUESTION:
     ${query}
     `;
+
+    return { prompt, contextTokens };
   }
 
-  private async serializeContext(context: PromptContext[]): Promise<string> {
+  /**
+   * Serialises the retrieved chunks into a structured context block for the LLM,
+   * respecting the max context token limit. Returns the serialised string and the
+   * total token count of the context.
+   */
+  async serializeContext(context: PromptContext[]): Promise<{
+    context: string;
+    totalTokens: number;
+  }> {
     const parts: string[] = [];
 
     let totalTokens = 0;
@@ -63,6 +78,6 @@ export class PromptBuilder {
       totalTokens += sectionTokens;
     }
 
-    return parts.join("\n\n");
+    return { context: parts.join("\n\n"), totalTokens };
   }
 }
