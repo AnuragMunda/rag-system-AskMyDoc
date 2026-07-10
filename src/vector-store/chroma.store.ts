@@ -1,8 +1,15 @@
 import { EmbeddedChunk } from "@/shared/types/embedding.types.js";
 import { ChromaClient } from "chromadb";
+import { env } from "@/config/env.js";
+
+const parsedUrl = new URL(env.CHROMA_URL);
 
 export class ChromaStore {
-  private client = new ChromaClient();
+  private client = new ChromaClient({
+    host: parsedUrl.hostname,
+    port: Number(parsedUrl.port) || 8000,
+    ssl: parsedUrl.protocol === "https:",
+  });
 
   async store(
     collectionName: string,
