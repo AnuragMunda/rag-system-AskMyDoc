@@ -6,7 +6,10 @@ Ask My Docs is a modular RAG application capable of ingesting PDFs, Markdown fil
 
 Unlike many simple RAG demos, this project is designed with production architecture in mind. It emphasizes document structure preservation, metadata tracking, modular components, and an extensible retrieval pipeline that can evolve into a fully production-ready knowledge system.
 
----
+## 🖼 Preview
+
+![Ask my doc UI](https://i.ibb.co/twzgbMX1/Screenshot-From-2026-07-10-17-32-10.png)
+
 
 # Features
 
