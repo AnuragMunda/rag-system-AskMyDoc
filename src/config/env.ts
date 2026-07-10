@@ -6,8 +6,6 @@ const envSchema = z.object({
 
   GEMINI_API_KEY: z.string(),
 
-  DATABASE_URL: z.string(),
-
   CHROMA_URL: z.string(),
 });
 
