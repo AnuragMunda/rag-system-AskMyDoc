@@ -271,10 +271,10 @@ src/
 | Language        | TypeScript             |
 | Runtime         | Node.js                |
 | LLM             | Gemini                 |
-| Embeddings      | text-embedding-3-small |
+| Embeddings      | Gemini embeddings      |
 | Vector Database | ChromaDB               |
 | Parsing         | Custom parsers         |
-| Tokenization    | tiktoken               |
+| Tokenization    | Gemini `countTokens`   |
 | Logging         | Pino                   |
 
 ---
@@ -349,11 +349,56 @@ Development
 pnpm dev
 ```
 
-Build
+Build and run the production server
 
 ```bash
 pnpm build
+pnpm start
 ```
+
+The build rewrites TypeScript path aliases and copies `src/public` into
+`dist/public`, so the compiled server can run with plain Node.js.
+
+---
+
+# Production Deployment (Docker Compose)
+
+The deployment stack runs the app, a self-hosted Chroma server, and Caddy
+(TLS + basic auth) on a single VPS.
+
+1. Provision a Linux VPS with Docker and the Compose plugin, then point your
+   domain's DNS record at it.
+2. Create the production environment file:
+
+   ```bash
+   cp .env.production.example .env
+   ```
+
+3. Fill in `GEMINI_API_KEY`, `APP_DOMAIN`, and `APP_BASIC_AUTH_USER`.
+   Generate the Caddy password hash and keep it single-quoted in `.env`:
+
+   ```bash
+   docker run --rm caddy:2-alpine caddy hash-password --plaintext 'your-password'
+   ```
+
+4. Build and start the stack:
+
+   ```bash
+   docker compose up -d --build
+   docker compose ps
+   ```
+
+5. Open `https://<APP_DOMAIN>`. The app is only published on
+   `127.0.0.1:3000`; Caddy is the public entry point. Chroma is reachable only
+   on the internal Docker network.
+
+Persistent data lives in the `app-storage` (uploaded originals),
+`chroma-data` (vector store), and `caddy-*` volumes. Back these up before
+upgrades, and pin the `chromadb/chroma` image tag when changing versions.
+
+Local development (`pnpm dev`) and the production build (`pnpm build &&
+pnpm start`) do not require Docker, but both need a reachable Chroma server
+via `CHROMA_URL`.
 
 ---
 

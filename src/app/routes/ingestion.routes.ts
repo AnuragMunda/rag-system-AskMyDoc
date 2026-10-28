@@ -9,6 +9,11 @@ import { Chunker } from "@/chunking/chunker.js";
 import { EmbeddingService } from "@/embeddings/embedding.service.js";
 import { ChromaStore } from "@/vector-store/chroma.store.js";
 import { logger } from "@/shared/logger/logger.js";
+import { env } from "@/config/env.js";
+
+const storageDir = path.resolve(env.STORAGE_DIR);
+
+await fs.mkdir(storageDir, { recursive: true });
 
 /**
  * Multer disk-storage engine that preserves the original file extension.
@@ -16,14 +21,17 @@ import { logger } from "@/shared/logger/logger.js";
  * factory cannot detect the document type from the path.
  */
 const storage = multer.diskStorage({
-  destination: path.resolve("storage/documents"),
+  destination: storageDir,
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, `${uuidv4()}${ext}`);
   },
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: env.MAX_UPLOAD_BYTES, files: 1 },
+});
 const vectorStore = new ChromaStore();
 
 /**
@@ -38,8 +46,9 @@ const vectorStore = new ChromaStore();
  */
 const ingestFile: Router = Router();
 ingestFile.post("/file", upload.single("file"), async (req, res) => {
+  const file = req.file;
+
   try {
-    const file = req.file;
     if (!file) {
       res.status(400).json({ error: "No file provided" });
       return;
@@ -81,6 +90,10 @@ ingestFile.post("/file", upload.single("file"), async (req, res) => {
       collectionName,
     });
   } catch (error) {
+    if (file) {
+      await fs.unlink(file.path).catch(() => {});
+    }
+
     const message =
       error instanceof Error ? error.message : "Unknown error during ingestion";
     logger.error({ error: message }, "File ingestion failed");

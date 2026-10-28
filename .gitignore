@@ -52,6 +52,7 @@ build/
 .env
 .env.test
 .env.local
+.env.production
 .env.*.local
 
 # MacOS
@@ -86,3 +87,7 @@ yarn.lock
 getting-started/
 chroma/
 my_chroma_data
+
+# Uploaded documents and backups
+storage/
+backups/

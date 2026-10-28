@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && tsc-alias && node scripts/copy-assets.mjs",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -15,6 +15,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=20 <25"
+  },
   "packageManager": "pnpm@10.32.1",
   "devDependencies": {
     "@types/express": "^5.0.3",
@@ -26,20 +29,21 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
     "prettier": "^3.8.3",
+    "tsc-alias": "^1.9.9",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.4"
   },
   "dependencies": {
     "@chroma-core/default-embed": "^0.1.9",
-    "express": "^5.2.1",
-    "multer": "^2.0.0-rc.0",
     "@chroma-core/google-gemini": "^0.1.10",
     "@google/genai": "^2.8.0",
     "@mozilla/readability": "^0.6.0",
     "chromadb": "^3.4.3",
     "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "jsdom": "^29.1.1",
+    "multer": "^2.0.0-rc.0",
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^5.7.284",
     "pino": "^10.3.1",

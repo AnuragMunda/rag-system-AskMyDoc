@@ -115,12 +115,15 @@ export class PdfParser implements DocumentParser {
       page.push({
         pageNumber: pageNum,
         content: pageText,
-        blocks: pageText.split("\n\n").map((block, index) => ({
-          id: `block-${index + 1}`,
-          index,
-          type: "paragraph",
-          text: block.trim(),
-        })),
+        blocks: pageText
+          .split("\n\n")
+          .map((block, index) => ({
+            id: `block-${index + 1}`,
+            index,
+            type: "paragraph" as const,
+            text: block.trim(),
+          }))
+          .filter((block) => block.text.length > 0),
       });
 
       logger.info({ characterCount: pageText.length });
@@ -177,14 +180,21 @@ export class PdfParser implements DocumentParser {
       lines.push({ y: currentY!, text: currentLine.trim() });
     }
 
-    const medianGap = findMedian(gapsY.sort((a, b) => a - b));
+    const contentLines = lines.filter((line) => line.text.length > 0);
+
+    if (contentLines.length === 0) {
+      return "";
+    }
+
+    const medianGap =
+      gapsY.length > 0 ? findMedian(gapsY.sort((a, b) => a - b)) : 0;
     const blocks: string[] = [];
 
-    let currentParagraph = lines[0]!.text;
+    let currentParagraph = contentLines[0]!.text;
 
-    for (let i = 1; i < lines.length; i++) {
-      const prev = lines[i - 1]!;
-      const current = lines[i]!;
+    for (let i = 1; i < contentLines.length; i++) {
+      const prev = contentLines[i - 1]!;
+      const current = contentLines[i]!;
 
       const gap = Math.abs(prev.y - current.y);
       const isParagraphBreak = gap > medianGap * 1.3;
