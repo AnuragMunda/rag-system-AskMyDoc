@@ -11,6 +11,11 @@ import { DocumentParser } from "./parser.interface.js";
 import { Readability } from "@mozilla/readability";
 import { logger } from "@/shared/logger/logger.js";
 import { updateHeadingStack } from "@/shared/utils/helper.js";
+import { assertSafeHttpUrl } from "@/shared/utils/safe-url.js";
+
+const MAX_REDIRECTS = 5;
+const FETCH_TIMEOUT_MS = 15_000;
+const MAX_PAGE_BYTES = 10 * 1024 * 1024;
 
 export class WebParser implements DocumentParser {
   async parse(url: string): Promise<ParsedDocument> {
@@ -79,13 +84,78 @@ export class WebParser implements DocumentParser {
   }
 
   private async fetchPage(url: string): Promise<string> {
-    const page = await fetch(url);
+    let currentUrl = await assertSafeHttpUrl(url);
 
-    if (!page.ok) {
-      throw new Error(`Failed to fetch page: ${page.status}`);
+    for (
+      let redirectCount = 0;
+      redirectCount <= MAX_REDIRECTS;
+      redirectCount += 1
+    ) {
+      const response = await fetch(currentUrl, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        headers: {
+          Accept: "text/html,application/xhtml+xml",
+          "User-Agent": "AskMyDocsBot/1.0",
+        },
+      });
+
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+
+        if (!location) {
+          throw new Error("Redirect response did not include a location");
+        }
+
+        currentUrl = await assertSafeHttpUrl(
+          new URL(location, currentUrl).toString(),
+        );
+        await response.body?.cancel().catch(() => {});
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch page: ${response.status}`);
+      }
+
+      const contentLength = Number(
+        response.headers.get("content-length") ?? 0,
+      );
+
+      if (contentLength > MAX_PAGE_BYTES) {
+        throw new Error("Webpage is too large");
+      }
+
+      const reader = response.body?.getReader();
+
+      if (!reader) {
+        return "";
+      }
+
+      const chunks: Uint8Array[] = [];
+      let totalBytes = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        totalBytes += value.byteLength;
+
+        if (totalBytes > MAX_PAGE_BYTES) {
+          await reader.cancel();
+          throw new Error("Webpage is too large");
+        }
+
+        chunks.push(value);
+      }
+
+      return Buffer.concat(chunks).toString("utf8");
     }
 
-    return page.text();
+    throw new Error("Too many redirects");
   }
 
   // Extracts content from the page

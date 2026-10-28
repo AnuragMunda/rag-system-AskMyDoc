@@ -90,14 +90,14 @@ ingestFile.post("/file", upload.single("file"), async (req, res) => {
       collectionName,
     });
   } catch (error) {
-    if (file) {
-      await fs.unlink(file.path).catch(() => {});
-    }
-
     const message =
       error instanceof Error ? error.message : "Unknown error during ingestion";
     logger.error({ error: message }, "File ingestion failed");
     res.status(500).json({ error: message });
+  } finally {
+    if (file) {
+      await fs.unlink(file.path).catch(() => {});
+    }
   }
 });
 

@@ -314,6 +314,13 @@ GEMINI_API_KEY=your_api_key
 CHROMA_URL=http://localhost:8000
 ```
 
+For Chroma Cloud, omit `CHROMA_URL` and set `CHROMA_API_KEY`,
+`CHROMA_TENANT`, and `CHROMA_DATABASE`; set `CHROMA_HOST` only when the
+database is outside the default US region. Set both `APP_AUTH_USER` and
+`APP_AUTH_PASSWORD` to require Basic Auth on the app itself. The Docker
+Compose stack uses the separate `APP_BASIC_AUTH_*` variables at the Caddy
+layer.
+
 ---
 
 # Running ChromaDB
@@ -399,6 +406,48 @@ upgrades, and pin the `chromadb/chroma` image tag when changing versions.
 Local development (`pnpm dev`) and the production build (`pnpm build &&
 pnpm start`) do not require Docker, but both need a reachable Chroma server
 via `CHROMA_URL`.
+
+---
+
+# Production Deployment (Vercel)
+
+Vercel runs the Express app as a single function. Chroma Cloud provides the
+persistent vector store, and the app enforces HTTP Basic Auth itself because
+Caddy is not part of this deployment.
+
+1. Create a Chroma Cloud database and copy its API key, tenant, and database
+   name. Use the `aws-us-east-1` region for the lowest latency with Vercel's
+   default `iad1` function region; set `CHROMA_HOST` if your database is in
+   another region.
+2. Set the variables from `.env.vercel.example` in the Vercel project for
+   both Production and Preview. Do not set `APP_DOMAIN` or the
+   `APP_BASIC_AUTH_*` Caddy variables on Vercel.
+3. Deploy the repository normally. Vercel detects `src/index.ts` and runs the
+   Express listener as a function; no `vercel.json` is required.
+4. Keep `APP_AUTH_USER` and `APP_AUTH_PASSWORD` set so the UI and API require
+   Basic Auth. Only `/api/health` is public.
+5. Uploads are stored temporarily in `/tmp` and removed after ingestion.
+   Vercel limits request bodies to 4.5 MB, so `MAX_UPLOAD_BYTES` is set to
+   4 MiB in the Vercel example. Large files need a direct-to-object-storage
+   upload flow instead of the current multipart endpoint.
+6. Chroma Cloud includes $5 of free usage credits, then bills by usage. The
+   Gemini API also has free-tier quotas; monitor both when ingesting large
+   documents. Vercel Hobby functions have a 300-second maximum duration.
+
+URL ingestion is retained and protected by an SSRF guard that rejects
+loopback, private, link-local, and reserved addresses and validates redirect
+hops. Rate limiting is applied per function instance, so it is a
+best-effort protection rather than a globally shared quota.
+
+To verify a deployment:
+
+```bash
+curl -i https://<deployment>/api/health
+curl -i https://<deployment>/
+curl -i -u "$APP_AUTH_USER:$APP_AUTH_PASSWORD" https://<deployment>/
+curl -i -u "$APP_AUTH_USER:$APP_AUTH_PASSWORD" \
+  https://<deployment>/api/collections
+```
 
 ---
 

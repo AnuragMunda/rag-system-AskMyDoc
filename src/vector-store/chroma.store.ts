@@ -1,16 +1,36 @@
 import { EmbeddedChunk } from "@/shared/types/embedding.types.js";
-import { ChromaClient } from "chromadb";
+import { ChromaClient, CloudClient } from "chromadb";
 import { env } from "@/config/env.js";
 
-const parsedUrl = new URL(env.CHROMA_URL);
 const BATCH_SIZE = 100;
 
-export class ChromaStore {
-  private client = new ChromaClient({
+function createClient(): ChromaClient {
+  if (env.CHROMA_API_KEY) {
+    return new CloudClient({
+      apiKey: env.CHROMA_API_KEY,
+      ...(env.CHROMA_HOST ? { host: env.CHROMA_HOST } : {}),
+      ...(env.CHROMA_TENANT ? { tenant: env.CHROMA_TENANT } : {}),
+      ...(env.CHROMA_DATABASE ? { database: env.CHROMA_DATABASE } : {}),
+    });
+  }
+
+  if (!env.CHROMA_URL) {
+    throw new Error("CHROMA_URL or CHROMA_API_KEY must be configured");
+  }
+
+  const parsedUrl = new URL(env.CHROMA_URL);
+
+  return new ChromaClient({
     host: parsedUrl.hostname,
-    port: Number(parsedUrl.port) || 8000,
+    port:
+      Number(parsedUrl.port) ||
+      (parsedUrl.protocol === "https:" ? 443 : 8000),
     ssl: parsedUrl.protocol === "https:",
   });
+}
+
+export class ChromaStore {
+  private client = createClient();
 
   async store(
     collectionName: string,
